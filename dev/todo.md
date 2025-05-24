@@ -36,6 +36,21 @@ Old features / code that I will need
   - [x] use tested system prompt
   - [ ] add an option for user to do additional freeform text requests in chat (1 follow-up?)
 
+## Human checks
+- [x] download
+- [x] convert to mp3
+- [x] cut audio
+- [ ] transcribe
+- [ ] format and merge
+- [ ] summarize
+
 For future, NOT NOW
   - [ ] just 'reply to' activates gpt chat mode with that message text as context
-  - [ ] add customized vocabulary / terms and send them to whisper api
+  - [ ] add customized vocabulary / terms and send them to whisper api  
+    - [ ] "есть ли какие-то уникальные словечки которые тебе важно чтобы whisper распознал правильно"?
+
+
+- [ ] add 3 models - 'whisper-1', 'gpt-4o-mini-transcribe', 'gpt-4o-transcribe'
+  - [ ] compare prices (using check-script? transcribe a small audio first to see model response format and if it has prices / tokens)
+  - [ ] allow user to pick which model to use for transcription (use ask_user_choice), default - whisper-1
+  - [ ] 

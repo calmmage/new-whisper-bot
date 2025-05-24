@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 from typing import Optional
 
@@ -10,7 +9,7 @@ async def create_summary(
     transcription: str,
     max_length: int = 1000,
     username: Optional[str] = None,
-    model: str = "gpt-4-1106-preview"
+    model: str = "gpt-4-1106-preview",
 ) -> str:
     """
     Create a summary of the transcription using botspot's llm_provider.
@@ -31,26 +30,28 @@ async def create_summary(
 
     try:
         # Load the system prompt from file
-        system_prompt_path = Path(__file__).parent.parent.parent / "dev" / "summary_system_prompt.txt"
+        system_prompt_path = (
+            Path(__file__).parent.parent.parent / "dev" / "summary_system_prompt.txt"
+        )
         if system_prompt_path.exists():
-            with open(system_prompt_path, "r") as f:
+            with open(system_prompt_path) as f:
                 system_prompt = f.read()
         else:
             system_prompt = (
                 "Summarize key points from the conversation and exportable artifacts\n"
                 "explicitly make a list of \n"
                 "- action points for specific people\n"
-                "- general action points - cued by the explicit phrases \"we should do this\" etc.\n"
+                '- general action points - cued by the explicit phrases "we should do this" etc.\n'
                 "- other meaningful groups \n\n"
                 "Format should be with specific simple bullet points\n"
-                "\"\"\"\n"
+                '"""\n'
                 "Artifact name\n"
                 "- point 1\n"
                 "- point 2\n\n"
                 "Group 2\n"
                 "- point 3\n"
                 "- point 4\n"
-                "\"\"\"\n\n"
+                '"""\n\n'
                 "Summary should be in the language of the original"
             )
 
@@ -74,7 +75,7 @@ async def create_summary(
             model=model,
             user=username,
             temperature=0.3,
-            max_tokens=1024
+            max_tokens=1024,
         )
 
         logger.info(f"Summary created: {len(summary)} characters")

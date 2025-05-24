@@ -1,25 +1,31 @@
 import asyncio
 import os
-import time
 from pathlib import Path
-from typing import List, Optional, Union
+from typing import List, Optional
 
 import openai
 from loguru import logger
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 
 @retry(
     stop=stop_after_attempt(5),
     wait=wait_exponential(multiplier=1, min=2, max=60),
-    retry=retry_if_exception_type((openai.RateLimitError, openai.APITimeoutError, openai.APIConnectionError)),
-    reraise=True
+    retry=retry_if_exception_type(
+        (openai.RateLimitError, openai.APITimeoutError, openai.APIConnectionError)
+    ),
+    reraise=True,
 )
 async def parse_audio_chunk(
     audio_path: Path,
     model_name: str = "whisper-1",
     language: Optional[str] = None,
-    api_key: Optional[str] = None
+    api_key: Optional[str] = None,
 ) -> str:
     """
     Parse a single audio chunk using OpenAI Whisper API.
@@ -53,14 +59,14 @@ async def parse_audio_chunk(
                 options["language"] = language
 
             response = await client.audio.transcriptions.create(
-                file=audio_file,
-                model=model_name,
-                **options
+                file=audio_file, model=model_name, **options
             )
 
             # Extract the transcription text
             transcription = response
-            logger.info(f"Transcription complete for {audio_path}: {len(transcription)} characters")
+            logger.info(
+                f"Transcription complete for {audio_path}: {len(transcription)} characters"
+            )
 
             return transcription
 
@@ -74,7 +80,7 @@ async def parse_audio_chunks(
     model_name: str = "whisper-1",
     language: Optional[str] = None,
     api_key: Optional[str] = None,
-    max_concurrent: int = 3
+    max_concurrent: int = 3,
 ) -> List[str]:
     """
     Parse multiple audio chunks using OpenAI Whisper API.

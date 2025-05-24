@@ -1,8 +1,7 @@
-import os
 import subprocess
 import time
 from pathlib import Path
-from typing import List, Optional, Dict, Any
+from typing import List, Optional
 
 import psutil
 from loguru import logger
@@ -15,7 +14,7 @@ async def cut_audio_into_pieces(
     overlap_duration: int = 30,  # 30 seconds overlap
     format: str = "mp3",
     use_memory_profiler: bool = False,
-    rate_limit: int = 50  # Maximum number of chunks to create
+    rate_limit: int = 50,  # Maximum number of chunks to create
 ) -> List[Path]:
     """
     Cut audio file into smaller pieces with overlap between consecutive chunks.
@@ -46,17 +45,16 @@ async def cut_audio_into_pieces(
     try:
         cmd = [
             "ffprobe",
-            "-v", "error",
-            "-show_entries", "format=duration",
-            "-of", "default=noprint_wrappers=1:nokey=1",
-            str(audio_path)
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration",
+            "-of",
+            "default=noprint_wrappers=1:nokey=1",
+            str(audio_path),
         ]
 
-        process = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
-        )
+        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
         stdout, stderr = process.communicate()
 
@@ -73,32 +71,50 @@ async def cut_audio_into_pieces(
 
     # Calculate the number of chunks
     effective_chunk_duration = chunk_duration - overlap_duration
-    num_chunks = max(1, int((duration - overlap_duration) / effective_chunk_duration) + 1)
+    num_chunks = max(
+        1, int((duration - overlap_duration) / effective_chunk_duration) + 1
+    )
 
     # Adjust chunk duration if number of chunks exceeds rate limit
     if num_chunks > rate_limit - 5:  # Leave some buffer
-        logger.info(f"Number of chunks ({num_chunks}) exceeds rate limit ({rate_limit}), adjusting chunk duration")
+        logger.info(
+            f"Number of chunks ({num_chunks}) exceeds rate limit ({rate_limit}), adjusting chunk duration"
+        )
         # Calculate new effective chunk duration to limit number of chunks
         new_effective_duration = (duration - overlap_duration) / (rate_limit - 5)
         # Calculate new chunk duration
         chunk_duration = new_effective_duration + overlap_duration
         # Recalculate number of chunks
         effective_chunk_duration = chunk_duration - overlap_duration
-        num_chunks = max(1, int((duration - overlap_duration) / effective_chunk_duration) + 1)
+        num_chunks = max(
+            1, int((duration - overlap_duration) / effective_chunk_duration) + 1
+        )
         logger.info(f"Adjusted chunk duration to {chunk_duration:.2f} seconds")
 
-    logger.info(f"Cutting audio into {num_chunks} chunks of {chunk_duration} seconds with {overlap_duration} seconds overlap")
+    logger.info(
+        f"Cutting audio into {num_chunks} chunks of {chunk_duration} seconds with {overlap_duration} seconds overlap"
+    )
 
     # Choose the appropriate implementation based on the flag
     if use_memory_profiler:
         return await cut_audio_into_pieces_with_profiler(
-            audio_path, output_dir, duration, num_chunks, 
-            chunk_duration, overlap_duration, format
+            audio_path,
+            output_dir,
+            duration,
+            num_chunks,
+            chunk_duration,
+            overlap_duration,
+            format,
         )
     else:
         return await cut_audio_into_pieces_standard(
-            audio_path, output_dir, duration, num_chunks, 
-            chunk_duration, overlap_duration, format
+            audio_path,
+            output_dir,
+            duration,
+            num_chunks,
+            chunk_duration,
+            overlap_duration,
+            format,
         )
 
 
@@ -109,7 +125,7 @@ async def cut_audio_into_pieces_standard(
     num_chunks: int,
     chunk_duration: int = 600,
     overlap_duration: int = 30,
-    format: str = "mp3"
+    format: str = "mp3",
 ) -> List[Path]:
     """
     Standard implementation of cutting audio into pieces using ffmpeg.
@@ -127,7 +143,7 @@ async def cut_audio_into_pieces_standard(
     Returns:
         List of paths to the audio pieces
     """
-    logger.info(f"Cutting audio into pieces (standard implementation)")
+    logger.info("Cutting audio into pieces (standard implementation)")
 
     effective_chunk_duration = chunk_duration - overlap_duration
     chunk_paths = []
@@ -145,7 +161,9 @@ async def cut_audio_into_pieces_standard(
             if current_time >= duration:
                 break
 
-        logger.info(f"Creating {len(start_times)} chunks with {overlap_duration}s overlap")
+        logger.info(
+            f"Creating {len(start_times)} chunks with {overlap_duration}s overlap"
+        )
 
         # Create each chunk with the specified overlap
         for i, start_time in enumerate(start_times):
@@ -158,22 +176,27 @@ async def cut_audio_into_pieces_standard(
             # Build the ffmpeg command for this chunk
             cmd = [
                 "ffmpeg",
-                "-i", str(audio_path),  # Input file
-                "-ss", str(start_time),  # Start time
-                "-to", str(end_time),  # End time (including overlap)
-                "-c:a", "libmp3lame" if format == "mp3" else format,  # Audio codec
-                "-q:a", "2",  # Audio quality (0-9, 0=best)
+                "-i",
+                str(audio_path),  # Input file
+                "-ss",
+                str(start_time),  # Start time
+                "-to",
+                str(end_time),  # End time (including overlap)
+                "-c:a",
+                "libmp3lame" if format == "mp3" else format,  # Audio codec
+                "-q:a",
+                "2",  # Audio quality (0-9, 0=best)
                 "-y",  # Overwrite output file if it exists
-                str(chunk_path)  # Output file
+                str(chunk_path),  # Output file
             ]
 
-            logger.debug(f"Creating chunk {i+1}: start={start_time:.2f}s, end={end_time:.2f}s, duration={(end_time-start_time):.2f}s")
+            logger.debug(
+                f"Creating chunk {i + 1}: start={start_time:.2f}s, end={end_time:.2f}s, duration={(end_time - start_time):.2f}s"
+            )
 
             # Run the command
             process = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
+                cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE
             )
 
             # Wait for the process to complete
@@ -181,9 +204,11 @@ async def cut_audio_into_pieces_standard(
 
             if process.returncode != 0:
                 error_msg = stderr.decode() if stderr else "Unknown error"
-                raise RuntimeError(f"FFmpeg cutting failed for chunk {i+1}: {error_msg}")
+                raise RuntimeError(
+                    f"FFmpeg cutting failed for chunk {i + 1}: {error_msg}"
+                )
 
-            logger.info(f"Created chunk {i+1}/{len(start_times)}: {chunk_path}")
+            logger.info(f"Created chunk {i + 1}/{len(start_times)}: {chunk_path}")
             chunk_paths.append(chunk_path)
 
     except Exception as e:
@@ -200,7 +225,7 @@ async def cut_audio_into_pieces_with_profiler(
     num_chunks: int,
     chunk_duration: int = 600,
     overlap_duration: int = 30,
-    format: str = "mp3"
+    format: str = "mp3",
 ) -> List[Path]:
     """
     Memory-profiled implementation of cutting audio into pieces using ffmpeg.
@@ -218,7 +243,7 @@ async def cut_audio_into_pieces_with_profiler(
     Returns:
         List of paths to the audio pieces
     """
-    logger.info(f"Cutting audio into pieces (with memory profiler)")
+    logger.info("Cutting audio into pieces (with memory profiler)")
 
     effective_chunk_duration = chunk_duration - overlap_duration
     chunk_paths = []
@@ -237,7 +262,9 @@ async def cut_audio_into_pieces_with_profiler(
             if current_time >= duration:
                 break
 
-        logger.info(f"Creating {len(start_times)} chunks with {overlap_duration}s overlap")
+        logger.info(
+            f"Creating {len(start_times)} chunks with {overlap_duration}s overlap"
+        )
 
         # Create each chunk with the specified overlap
         for i, start_time in enumerate(start_times):
@@ -250,16 +277,23 @@ async def cut_audio_into_pieces_with_profiler(
             # Build the ffmpeg command for this chunk
             cmd = [
                 "ffmpeg",
-                "-i", str(audio_path),  # Input file
-                "-ss", str(start_time),  # Start time
-                "-to", str(end_time),  # End time (including overlap)
-                "-c:a", "libmp3lame" if format == "mp3" else format,  # Audio codec
-                "-q:a", "2",  # Audio quality (0-9, 0=best)
+                "-i",
+                str(audio_path),  # Input file
+                "-ss",
+                str(start_time),  # Start time
+                "-to",
+                str(end_time),  # End time (including overlap)
+                "-c:a",
+                "libmp3lame" if format == "mp3" else format,  # Audio codec
+                "-q:a",
+                "2",  # Audio quality (0-9, 0=best)
                 "-y",  # Overwrite output file if it exists
-                str(chunk_path)  # Output file
+                str(chunk_path),  # Output file
             ]
 
-            logger.debug(f"Creating chunk {i+1}: start={start_time:.2f}s, end={end_time:.2f}s, duration={(end_time-start_time):.2f}s")
+            logger.debug(
+                f"Creating chunk {i + 1}: start={start_time:.2f}s, end={end_time:.2f}s, duration={(end_time - start_time):.2f}s"
+            )
 
             # Start memory profiling
             memory_stats = []
@@ -268,9 +302,7 @@ async def cut_audio_into_pieces_with_profiler(
             try:
                 # Run the command
                 process = subprocess.Popen(
-                    cmd,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE
+                    cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE
                 )
 
                 # Monitor memory usage while the process is running
@@ -282,14 +314,18 @@ async def cut_audio_into_pieces_with_profiler(
                             memory_info = proc.memory_info()
 
                             # Record memory usage
-                            memory_stats.append({
-                                'timestamp': time.time(),
-                                'rss': memory_info.rss,  # Resident Set Size
-                                'vms': memory_info.vms,  # Virtual Memory Size
-                                'chunk': i+1
-                            })
+                            memory_stats.append(
+                                {
+                                    "timestamp": time.time(),
+                                    "rss": memory_info.rss,  # Resident Set Size
+                                    "vms": memory_info.vms,  # Virtual Memory Size
+                                    "chunk": i + 1,
+                                }
+                            )
 
-                            logger.debug(f"Chunk {i+1} memory usage: RSS={memory_info.rss / (1024*1024):.2f}MB, VMS={memory_info.vms / (1024*1024):.2f}MB")
+                            logger.debug(
+                                f"Chunk {i + 1} memory usage: RSS={memory_info.rss / (1024 * 1024):.2f}MB, VMS={memory_info.vms / (1024 * 1024):.2f}MB"
+                            )
                         except (psutil.NoSuchProcess, psutil.AccessDenied):
                             pass
 
@@ -301,7 +337,9 @@ async def cut_audio_into_pieces_with_profiler(
 
                 if process.returncode != 0:
                     error_msg = stderr.decode() if stderr else "Unknown error"
-                    raise RuntimeError(f"FFmpeg cutting failed for chunk {i+1}: {error_msg}")
+                    raise RuntimeError(
+                        f"FFmpeg cutting failed for chunk {i + 1}: {error_msg}"
+                    )
 
             finally:
                 # Ensure process is terminated
@@ -314,18 +352,30 @@ async def cut_audio_into_pieces_with_profiler(
 
             # Log memory usage statistics for this chunk
             if memory_stats:
-                peak_memory = max(stat['rss'] for stat in memory_stats) / (1024*1024)
-                avg_memory = sum(stat['rss'] for stat in memory_stats) / len(memory_stats) / (1024*1024)
-                logger.info(f"Chunk {i+1} memory usage: Peak={peak_memory:.2f}MB, Average={avg_memory:.2f}MB")
+                peak_memory = max(stat["rss"] for stat in memory_stats) / (1024 * 1024)
+                avg_memory = (
+                    sum(stat["rss"] for stat in memory_stats)
+                    / len(memory_stats)
+                    / (1024 * 1024)
+                )
+                logger.info(
+                    f"Chunk {i + 1} memory usage: Peak={peak_memory:.2f}MB, Average={avg_memory:.2f}MB"
+                )
 
-            logger.info(f"Created chunk {i+1}/{len(start_times)}: {chunk_path}")
+            logger.info(f"Created chunk {i + 1}/{len(start_times)}: {chunk_path}")
             chunk_paths.append(chunk_path)
 
         # Log overall memory usage statistics
         if all_memory_stats:
-            peak_memory = max(stat['rss'] for stat in all_memory_stats) / (1024*1024)
-            avg_memory = sum(stat['rss'] for stat in all_memory_stats) / len(all_memory_stats) / (1024*1024)
-            logger.info(f"Overall memory usage statistics: Peak={peak_memory:.2f}MB, Average={avg_memory:.2f}MB")
+            peak_memory = max(stat["rss"] for stat in all_memory_stats) / (1024 * 1024)
+            avg_memory = (
+                sum(stat["rss"] for stat in all_memory_stats)
+                / len(all_memory_stats)
+                / (1024 * 1024)
+            )
+            logger.info(
+                f"Overall memory usage statistics: Peak={peak_memory:.2f}MB, Average={avg_memory:.2f}MB"
+            )
 
     except Exception as e:
         logger.error(f"Error cutting audio into pieces: {e}")

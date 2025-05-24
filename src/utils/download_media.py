@@ -1,11 +1,11 @@
 import asyncio
 import os
 import re
-from loguru import logger
 from pathlib import Path
 from typing import Optional, Union
 
 from aiogram.types import Message as AiogramMessage
+from loguru import logger
 from pyrogram.types import Audio, Document
 from pyrogram.types import Message as PyrogramMessage
 from pyrogram.types import Photo, Video, VideoNote, Voice
@@ -22,11 +22,11 @@ async def get_pyrogram_client(
     bot_token: Optional[str] = None,
 ):
     global _pyrogram_client
-    
+
     # Return existing client if available
     if _pyrogram_client is not None:
         return _pyrogram_client
-    
+
     # telegram bot token, api_id, api_hash
     if api_id is None:
         from botspot import get_dependency_manager
@@ -97,14 +97,14 @@ async def download_file_from_aiogram_message(
 ):
     """
     Download file from aiogram message.
-    
+
     Args:
         message: Aiogram message object
         target_dir: Directory to save the file
         file_name: Custom file name (optional)
         use_original_file_name: Whether to use original file name
         use_subprocess: If True, use subprocess to avoid aiogram/pyrogram conflicts
-    
+
     Returns: path to a file on disk
     """
     message_id = message.message_id
@@ -124,23 +124,24 @@ async def download_file_from_aiogram_message(
 def _check_aiogram_running():
     """Check if aiogram is currently running and could conflict with pyrogram."""
     # Check if aiogram modules are imported and active
-    
+
     # Check for common aiogram patterns in the current event loop
     try:
         import asyncio
+
         loop = asyncio.get_running_loop()
-        
+
         # Check if there are tasks with aiogram-related names
         for task in asyncio.all_tasks(loop):
             task_name = str(task)
-            if any(name in task_name.lower() for name in ['aiogram']):
+            if any(name in task_name.lower() for name in ["aiogram"]):
                 logger.info(f"Found aiogram task: {task_name}")
                 return True
-                
+
     except RuntimeError:
         # No event loop running
         pass
-    
+
     return False
 
 
@@ -161,7 +162,7 @@ async def download_file_with_pyrogram(
             "Pyrogram is incompatible with aiogram when running in the same event loop. "
             "Use download_file_via_subprocess() instead to avoid conflicts."
         )
-    
+
     pyrogram_client = await get_pyrogram_client(
         api_id=api_id, api_hash=api_hash, bot_token=bot_token
     )
@@ -185,6 +186,7 @@ async def download_file_with_pyrogram(
 
     return file_path
 
+
 async def download_file_via_subprocess(
     message_id,
     username,
@@ -204,46 +206,53 @@ async def download_file_via_subprocess(
 
     # Build command arguments
     cmd = [
-        "python", str(script_path),
-        "--message_id", str(message_id),
-        "--username", username,
-        "--api_id", str(api_id),
-        "--api_hash", api_hash,
-        "--bot_token", bot_token,
+        "python",
+        str(script_path),
+        "--message_id",
+        str(message_id),
+        "--username",
+        username,
+        "--api_id",
+        str(api_id),
+        "--api_hash",
+        api_hash,
+        "--bot_token",
+        bot_token,
     ]
-    
+
     if target_dir is not None:
         cmd.extend(["--target_dir", str(target_dir)])
-    
+
     if file_name is not None:
         cmd.extend(["--file_name", file_name])
-    
+
     if use_original_file_name:
         cmd.append("--use_original_file_name")
 
     # Run subprocess asynchronously
     process = await asyncio.create_subprocess_exec(
-        *cmd,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE
+        *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
     )
-    
+
     stdout, stderr = await process.communicate()
-    
+
     if process.returncode != 0:
         error_msg = stderr.decode() if stderr else "Unknown error"
         raise RuntimeError(f"Download subprocess failed: {error_msg}")
-    
+
     script_output = stdout.decode()
-    
+
     # Parse downloaded file path from script output with regex
     match = re.search(r"Downloaded file path: (.*)", script_output)
     if not match:
-        raise RuntimeError(f"Could not parse downloaded file path from output: {script_output}")
-    
+        raise RuntimeError(
+            f"Could not parse downloaded file path from output: {script_output}"
+        )
+
     downloaded_file_path = match.group(1).strip()
-    
+
     return Path(downloaded_file_path)
+
 
 __all__ = [
     "download_file_from_aiogram_message",
@@ -257,6 +266,7 @@ __all__ = [
 
 if __name__ == "__main__":
     import argparse
+
     parser = argparse.ArgumentParser(description="Download media from Telegram")
 
     parser.add_argument("--message_id", type=int, required=True)

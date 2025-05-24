@@ -1,4 +1,3 @@
-import os
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import List, Optional
@@ -6,12 +5,12 @@ from typing import List, Optional
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings
 
-from src.utils.convert_video_to_audio import convert_video_to_audio
+from src.utils.convert_to_mp3 import convert_to_mp3
+from src.utils.create_summary import create_summary
 from src.utils.cut_audio import cut_audio_into_pieces
 from src.utils.download_media import download_file_from_aiogram_message
 from src.utils.merge_transcription_chunks import merge_transcription_chunks
 from src.utils.parse_audio_chunks import parse_audio_chunks
-from src.utils.create_summary import create_summary
 
 
 class AppConfig(BaseSettings):
@@ -26,13 +25,37 @@ class AppConfig(BaseSettings):
     whisper_chunk_duration: int = 120  # 2 minutes in seconds
     # whisper_overlap_duration: int = 30  # 30 seconds
     whisper_overlap_duration: int = 5  # 30 seconds
+    # actually, my account says 7500 rpm
+    # todo: disentangle the cutting logic from rate limit, set target chunk amount instead.
     whisper_rate_limit: int = 50  # Maximum number of chunks to create
+    # not sure - maybe 100? This is a global limit so need to be careful to not shoot me in the leg.
+    # todo: double-check
     whisper_max_concurrent: int = 50  # Maximum number of concurrent API calls
+    # todo: file size limit is 25 megabytes - look out for that instead..
+
+    target_chunk_count = 20
+    max_chunk_size = 20 * 60  # 20 min
+    min_chunk_size = 2 * 60  # 2 min
 
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
         extra = "ignore"
+
+
+# todo: use this.
+def calculate_optimal_chunk_size(
+    audio_size,
+    target_chunk_count=20,
+    max_chunk_size=20 * 60,  # 20 min,
+    min_chunk_size=2 * 60,  # 2 min,
+):
+    target_chunk_size = int(audio_size / target_chunk_count)
+    if target_chunk_size < min_chunk_size:
+        return min_chunk_size
+    if target_chunk_size > max_chunk_size:
+        return max_chunk_size
+    return target_chunk_size
 
 
 class AppBase(ABC):
@@ -59,16 +82,20 @@ class AppBase(ABC):
         pass
 
     @abstractmethod
-    async def merge_transcription_chunks(self, transcription_pieces: List[str], username: Optional[str] = None) -> str:
+    async def merge_transcription_chunks(
+        self, transcription_pieces: List[str], username: Optional[str] = None
+    ) -> str:
         """Merge transcription pieces back together"""
         pass
 
     @abstractmethod
-    async def create_summary(self, transcription: str, username: Optional[str] = None) -> str:
+    async def create_summary(
+        self, transcription: str, username: Optional[str] = None
+    ) -> str:
         """Create summary of transcription using LLM"""
         pass
 
-    async def run(self, message_id: int, username: str) -> str:
+    async def run(self, message_id: int, username: str, model="whisper-1") -> str:
         """Main workflow that orchestrates all processing steps"""
         # Download media
         media_path = await self.download_media(message_id, username)
@@ -80,10 +107,12 @@ class AppBase(ABC):
         audio_pieces = await self.cut_audio_into_pieces(audio_path)
 
         # Parse using OpenAI Whisper API
-        transcription_pieces = await self.parse_audio_chunks(audio_pieces)
+        transcription_pieces = await self.parse_audio_chunks(audio_pieces, model=model)
 
         # Merge pieces back
-        full_transcription = await self.merge_transcription_chunks(transcription_pieces, username)
+        full_transcription = await self.merge_transcription_chunks(
+            transcription_pieces, username
+        )
 
         return full_transcription
 
@@ -98,16 +127,13 @@ class App(AppBase):
         """Download media from message using aiogram"""
         # Use subprocess to avoid aiogram/pyrogram conflicts
         return await download_file_from_aiogram_message(
-            message_id=message_id,
-            username=username,
-            use_subprocess=True
+            message_id=message_id, username=username, use_subprocess=True
         )
 
     async def convert_video_to_audio(self, media_path: Path) -> Path:
         """Convert video to audio if necessary using ffmpeg"""
-        return await convert_video_to_audio(
-            video_path=media_path,
-            use_memory_profiler=self.config.use_memory_profiler
+        return await convert_to_mp3(
+            source_path=media_path, use_memory_profiler=self.config.use_memory_profiler
         )
 
     async def cut_audio_into_pieces(self, audio_path: Path) -> List[Path]:
@@ -117,10 +143,12 @@ class App(AppBase):
             chunk_duration=self.config.whisper_chunk_duration,
             overlap_duration=self.config.whisper_overlap_duration,
             rate_limit=self.config.whisper_rate_limit,
-            use_memory_profiler=self.config.use_memory_profiler
+            use_memory_profiler=self.config.use_memory_profiler,
         )
 
-    async def parse_audio_chunks(self, audio_pieces: List[Path]) -> List[str]:
+    async def parse_audio_chunks(
+        self, audio_pieces: List[Path], model="whisper-1"
+    ) -> List[str]:
         """Parse audio pieces using OpenAI Whisper API"""
         api_key = None
         if self.config.openai_api_key:
@@ -128,25 +156,29 @@ class App(AppBase):
 
         return await parse_audio_chunks(
             audio_chunks=audio_pieces,
-            model_name="whisper-1",
+            model_name=model,
             api_key=api_key,
-            max_concurrent=self.config.whisper_max_concurrent
+            max_concurrent=self.config.whisper_max_concurrent,
         )
 
-    async def merge_transcription_chunks(self, transcription_pieces: List[str], username: Optional[str] = None) -> str:
+    async def merge_transcription_chunks(
+        self, transcription_pieces: List[str], username: Optional[str] = None
+    ) -> str:
         """Merge transcription pieces back together using custom text_utils"""
         return await merge_transcription_chunks(
             transcription_chunks=transcription_pieces,
             buffer=25,
             match_cutoff=15,
-            username=username
+            username=username,
         )
 
-    async def create_summary(self, transcription: str, username: Optional[str] = None) -> str:
+    async def create_summary(
+        self, transcription: str, username: Optional[str] = None
+    ) -> str:
         """Create summary of transcription using botspot's llm_provider"""
         return await create_summary(
             transcription=transcription,
             max_length=1000,
             username=username,
-            model="gpt-4-1106-preview"  # Use GPT-4 Turbo for better summaries
+            model="gpt-4-1106-preview",  # Use GPT-4 Turbo for better summaries
         )

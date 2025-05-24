@@ -1,11 +1,11 @@
-import loguru
 from difflib import SequenceMatcher
 from typing import Iterable
 
+import loguru
 from bot_base.utils.gpt_utils import (
     arun_command_with_gpt,
-    token_limit_by_model,
     get_token_count,
+    token_limit_by_model,
 )
 
 
@@ -146,6 +146,7 @@ async def format_text_with_gpt(
         command = FORMAT_TEXT_COMMAND + KEEP_GRAMMAR_COMMAND
     return await arun_command_with_gpt(command, text, model=model)
 
+
 import re
 
 MAX_TELEGRAM_MESSAGE_LENGTH = 4096
@@ -183,7 +184,7 @@ DEFAULT_CHUNK_OVERLAP = 50
 
 
 def split_text_with_overlap(
-        text, chunk_size=DEFAULT_CHUNK_SIZE, chunk_overlap=DEFAULT_CHUNK_OVERLAP
+    text, chunk_size=DEFAULT_CHUNK_SIZE, chunk_overlap=DEFAULT_CHUNK_OVERLAP
 ):
     """
     Splits a given text into smaller chunks using the RecursiveCharacterTextSplitter.

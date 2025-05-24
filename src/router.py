@@ -1,16 +1,10 @@
-import threading
-import time
-from pathlib import Path
-
-import psutil
 from aiogram import F, Router, html
-from aiogram.filters import Command, CommandStart
+from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 from botspot import commands_menu, reply_safe
+from botspot.user_interactions import ask_user_choice
 from botspot.utils import send_safe
-from botspot.utils.unsorted import get_message_attachments
-from loguru import logger
 
 from app import App
 from src.app import App
@@ -52,16 +46,33 @@ async def main_chat_handler(message: Message, app: App, state: FSMContext):
 
     username = message.from_user.username
 
+    # ask user
+    model = await ask_user_choice(
+        message.chat.id,
+        "Please choose a model to use for transcription:",
+        {
+            "whisper-1": "Whisper 1 (Oldest, tested)",
+            "gpt-4o-mini-transcribe": "GPT-4o Mini (?)",
+            "gpt-4o-transcribe": "GPT-4o (Best, Slowest, most expensive)",
+        },
+        state=state,
+    )
+
     # Send a processing message
-    notif = await reply_safe(message, "🔄 Processing your media file... This may take a few minutes.")
+    notif = await reply_safe(
+        message, "🔄 Processing your media file... This may take a few minutes."
+    )
 
     # Transcribe the audio
-    transcription = await app.run(message.message_id, username)
+    transcription = await app.run(message.message_id, username, model=model)
     await reply_safe(message, transcription)
     await notif.delete()
 
+    # todo: save info - requests, results. usage stats - somewhere (to mongo?).
     # Create and send summary
     notif = await reply_safe(message, "🔄 Creating summary...")
     summary = await app.create_summary(transcription, username=username)
     await reply_safe(message, f"📋 <b>Summary:</b>\n\n{summary}")
+
+    # todo: tell user how much this costed me.
     await notif.delete()

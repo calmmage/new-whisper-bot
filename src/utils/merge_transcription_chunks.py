@@ -1,23 +1,23 @@
+import sys
+
+# Import custom text utils for better overlap detection
+from pathlib import Path
 from typing import List, Optional
 
 from botspot.llm_provider import aquery_llm_text
 from loguru import logger
 
-# Import custom text utils for better overlap detection
-from pathlib import Path
-import sys
-
 # Add the dev/old directory to the path to import text_utils
 old_utils_path = Path(__file__).parent.parent.parent / "dev" / "old"
 sys.path.append(str(old_utils_path))
-from text_utils import merge_all_chunks, merge_two_chunks
+from text_utils import merge_all_chunks
 
 
 async def merge_transcription_chunks(
     transcription_chunks: List[str],
     buffer: int = 25,
     match_cutoff: int = 15,
-    username: Optional[str] = None
+    username: Optional[str] = None,
 ) -> str:
     """
     Merge transcription chunks back together, handling overlaps intelligently.
@@ -41,10 +41,7 @@ async def merge_transcription_chunks(
 
     # Use the custom merge_all_chunks function from text_utils
     merged_text = merge_all_chunks(
-        transcription_chunks,
-        buffer=buffer,
-        match_cutoff=match_cutoff,
-        logger=logger
+        transcription_chunks, buffer=buffer, match_cutoff=match_cutoff, logger=logger
     )
 
     # Format the merged text using LLM to improve readability
@@ -59,9 +56,7 @@ async def merge_transcription_chunks(
 
 
 async def format_text_with_llm(
-    text: str,
-    username: Optional[str] = None,
-    model: str = "gpt-4-1106-preview"
+    text: str, username: Optional[str] = None, model: str = "gpt-4-1106-preview"
 ) -> str:
     """
     Format text with LLM to improve readability.
@@ -94,7 +89,7 @@ async def format_text_with_llm(
         model=model,
         user=username,
         temperature=0.3,
-        max_tokens=4096
+        max_tokens=4096,
     )
 
     return formatted_text

@@ -1,4 +1,3 @@
-
 import asyncio
 import pprint
 from io import BytesIO
@@ -6,21 +5,20 @@ from typing import BinaryIO
 
 import loguru
 import tqdm
-from pydub import AudioSegment
-
 from bot_base.utils.gpt_utils import (
+    WHISPER_RATE_LIMIT,
     Audio,
     atranscribe_audio,
     transcribe_audio,
-    WHISPER_RATE_LIMIT,
 )
+from pydub import AudioSegment
 
-DEFAULT_PERIOD = 120 * 1000 # 2 minutes
-DEFAULT_BUFFER = 5 * 1000 # 5 seconds
+DEFAULT_PERIOD = 120 * 1000  # 2 minutes
+DEFAULT_BUFFER = 5 * 1000  # 5 seconds
 
 
 def split_audio(
-        audio: Audio, period=DEFAULT_PERIOD, buffer=DEFAULT_BUFFER, logger=None
+    audio: Audio, period=DEFAULT_PERIOD, buffer=DEFAULT_BUFFER, logger=None
 ):
     if isinstance(audio, (str, BytesIO, BinaryIO)):
         logger.debug(f"Loading audio from {audio}")
@@ -33,7 +31,7 @@ def split_audio(
     if len(audio) / period > WHISPER_RATE_LIMIT - 5:
         period = len(audio) // (WHISPER_RATE_LIMIT - 5)
 
-    logger.debug(f"Splitting audio into chunks")
+    logger.debug("Splitting audio into chunks")
     while s + period < len(audio):
         chunks.append(audio[s : s + period])
         s += period - buffer
@@ -42,24 +40,24 @@ def split_audio(
 
     in_memory_audio_files = []
 
-    logger.debug(f"Converting chunks to mp3")
+    logger.debug("Converting chunks to mp3")
     for i, chunk in enumerate(chunks):
         buffer = BytesIO()
         chunk.export(buffer, format="mp3")  # check which format it is and
         # use the same
         buffer.name = f"chunk_{i}.mp3"
         in_memory_audio_files.append(buffer)
-    logger.debug(f"Converted chunks to mp3")
+    logger.debug("Converted chunks to mp3")
 
     return in_memory_audio_files
 
 
 async def split_and_transcribe_audio(
-        audio: Audio,
-        period: int = DEFAULT_PERIOD,
-        buffer: int = DEFAULT_BUFFER,
-        parallel: bool = None,
-        logger=None,
+    audio: Audio,
+    period: int = DEFAULT_PERIOD,
+    buffer: int = DEFAULT_BUFFER,
+    parallel: bool = None,
+    logger=None,
 ):
     if logger is None:
         logger = loguru.logger
@@ -80,5 +78,5 @@ async def split_and_transcribe_audio(
         for chunk in tqdm.std.tqdm(audio_chunks):
             text_chunks.append(transcribe_audio(chunk))
 
-    logger.debug(f"Parsed audio", data=pprint.pformat(text_chunks))
+    logger.debug("Parsed audio", data=pprint.pformat(text_chunks))
     return text_chunks
