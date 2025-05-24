@@ -14,7 +14,8 @@ async def cut_audio_into_pieces(
     chunk_duration: int = 600,  # 10 minutes in seconds
     overlap_duration: int = 30,  # 30 seconds overlap
     format: str = "mp3",
-    use_memory_profiler: bool = False
+    use_memory_profiler: bool = False,
+    rate_limit: int = 50  # Maximum number of chunks to create
 ) -> List[Path]:
     """
     Cut audio file into smaller pieces with optional overlap.
@@ -26,6 +27,7 @@ async def cut_audio_into_pieces(
         overlap_duration: Overlap duration between chunks in seconds (default: 30 seconds)
         format: Audio format for the output chunks (default: mp3)
         use_memory_profiler: Whether to use memory profiler implementation
+        rate_limit: Maximum number of chunks to create (default: 50)
 
     Returns:
         List of paths to the audio pieces
@@ -69,6 +71,18 @@ async def cut_audio_into_pieces(
     # Calculate the number of chunks
     effective_chunk_duration = chunk_duration - overlap_duration
     num_chunks = max(1, int((duration - overlap_duration) / effective_chunk_duration) + 1)
+
+    # Adjust chunk duration if number of chunks exceeds rate limit
+    if num_chunks > rate_limit - 5:  # Leave some buffer
+        logger.info(f"Number of chunks ({num_chunks}) exceeds rate limit ({rate_limit}), adjusting chunk duration")
+        # Calculate new effective chunk duration to limit number of chunks
+        new_effective_duration = (duration - overlap_duration) / (rate_limit - 5)
+        # Calculate new chunk duration
+        chunk_duration = new_effective_duration + overlap_duration
+        # Recalculate number of chunks
+        effective_chunk_duration = chunk_duration - overlap_duration
+        num_chunks = max(1, int((duration - overlap_duration) / effective_chunk_duration) + 1)
+        logger.info(f"Adjusted chunk duration to {chunk_duration:.2f} seconds")
 
     logger.info(f"Cutting audio into {num_chunks} chunks of {chunk_duration} seconds with {overlap_duration} seconds overlap")
 

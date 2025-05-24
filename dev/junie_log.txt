@@ -39,3 +39,16 @@ and are you running in async non-blocking subprocess?
 
 - parse audio (i will put a working gpt token in env)
 Make sure to save all results to file and add sanity checks on them (e.g. number of files after cutting, file size/format after conversion etc.)
+
+# Follow-up 3
+
+Remind me, how are we configuring chunk sizes?
+whisper api accepts max 50 files concurrently (cut them and then launch them all right away), so for optimal peroformance that was the targeting amount of files.. Also, i don't think it takes chunks above 20 minutes or something, maybe 10.
+Just in case several users submit us files simultaneously, i was thinking to avoid cutting to all 50 for smaller files.
+Did you even check the logic that calculates optimal amount of chunks to cut audio in? DEFAULT_PERIOD, DEFAULT_WHISPER_RATE_LIMIT.
+I don't know what is the limit on my account, but we need to play around that. Even more so - there's rate limit and there's concurrent connections limit, i think. We need to handle that properly. (assume some defaults, accept corrections from env)
+
+1) how do we pass to the cutting util the desired parameters (and then how does it transfer that to ffmpeg? Is the assumed properties tested in our check script?)
+2) where do you pass them?
+
+Make an analysis about other files and utils if there are similar requirements that you missed. Save that analysis to a txt file, with a short summary in the end.

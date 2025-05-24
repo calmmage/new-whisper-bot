@@ -15,8 +15,8 @@ from bot_base.utils.gpt_utils import (
     WHISPER_RATE_LIMIT,
 )
 
-DEFAULT_PERIOD = 120 * 1000
-DEFAULT_BUFFER = 5 * 1000
+DEFAULT_PERIOD = 120 * 1000 # 2 minutes
+DEFAULT_BUFFER = 5 * 1000 # 5 seconds
 
 
 def split_audio(

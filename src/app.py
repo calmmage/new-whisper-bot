@@ -21,6 +21,14 @@ class AppConfig(BaseSettings):
     openai_api_key: Optional[SecretStr] = None
     use_memory_profiler: bool = False
 
+    # Whisper API and audio chunking settings
+    # whisper_chunk_duration: int = 600  # 10 minutes in seconds
+    whisper_chunk_duration: int = 120  # 2 minutes in seconds
+    # whisper_overlap_duration: int = 30  # 30 seconds
+    whisper_overlap_duration: int = 5  # 30 seconds
+    whisper_rate_limit: int = 50  # Maximum number of chunks to create
+    whisper_max_concurrent: int = 50  # Maximum number of concurrent API calls
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
@@ -106,8 +114,9 @@ class App(AppBase):
         """Cut audio into smaller pieces using ffmpeg"""
         return await cut_audio_into_pieces(
             audio_path=audio_path,
-            chunk_duration=600,  # 10 minutes
-            overlap_duration=30,  # 30 seconds
+            chunk_duration=self.config.whisper_chunk_duration,
+            overlap_duration=self.config.whisper_overlap_duration,
+            rate_limit=self.config.whisper_rate_limit,
             use_memory_profiler=self.config.use_memory_profiler
         )
 
@@ -121,7 +130,7 @@ class App(AppBase):
             audio_chunks=audio_pieces,
             model_name="whisper-1",
             api_key=api_key,
-            max_concurrent=3  # Limit concurrent API calls
+            max_concurrent=self.config.whisper_max_concurrent
         )
 
     async def merge_transcription_chunks(self, transcription_pieces: List[str], username: Optional[str] = None) -> str:
