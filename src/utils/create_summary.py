@@ -1,43 +1,59 @@
 import os
+from pathlib import Path
 from typing import Optional
 
-import anthropic
+from botspot.llm_provider import aquery_llm_text
 from loguru import logger
 
 
 async def create_summary(
     transcription: str,
     max_length: int = 1000,
-    api_key: Optional[str] = None,
-    model: str = "claude-3-haiku-20240307"
+    username: Optional[str] = None,
+    model: str = "gpt-4-1106-preview"
 ) -> str:
     """
-    Create a summary of the transcription using Claude.
-    
+    Create a summary of the transcription using botspot's llm_provider.
+
     Args:
         transcription: The transcription text to summarize
         max_length: Maximum length of the summary in characters
-        api_key: Anthropic API key (defaults to ANTHROPIC_API_KEY environment variable)
-        model: Claude model to use
-        
+        username: Username for quota tracking
+        model: LLM model to use (default: gpt-4-1106-preview)
+
     Returns:
         Summary text
     """
     if not transcription:
         return "No transcription provided."
-    
-    # Get API key from environment if not provided
-    if api_key is None:
-        api_key = os.getenv("ANTHROPIC_API_KEY")
-        if not api_key:
-            raise ValueError("ANTHROPIC_API_KEY not found in environment variables")
-    
+
     logger.info(f"Creating summary of transcription ({len(transcription)} characters)")
-    
+
     try:
-        # Initialize Claude client
-        client = anthropic.Anthropic(api_key=api_key)
-        
+        # Load the system prompt from file
+        system_prompt_path = Path(__file__).parent.parent.parent / "dev" / "summary_system_prompt.txt"
+        if system_prompt_path.exists():
+            with open(system_prompt_path, "r") as f:
+                system_prompt = f.read()
+        else:
+            system_prompt = (
+                "Summarize key points from the conversation and exportable artifacts\n"
+                "explicitly make a list of \n"
+                "- action points for specific people\n"
+                "- general action points - cued by the explicit phrases \"we should do this\" etc.\n"
+                "- other meaningful groups \n\n"
+                "Format should be with specific simple bullet points\n"
+                "\"\"\"\n"
+                "Artifact name\n"
+                "- point 1\n"
+                "- point 2\n\n"
+                "Group 2\n"
+                "- point 3\n"
+                "- point 4\n"
+                "\"\"\"\n\n"
+                "Summary should be in the language of the original"
+            )
+
         # Create the prompt
         prompt = f"""
         Please create a concise summary of the following transcription. 
@@ -50,24 +66,20 @@ async def create_summary(
         Here is the transcription:
         {transcription}
         """
-        
-        # Call Claude API
-        response = client.messages.create(
+
+        # Call LLM using botspot's llm_provider
+        summary = await aquery_llm_text(
+            prompt=prompt,
+            system_prompt=system_prompt,
             model=model,
-            max_tokens=1024,
+            user=username,
             temperature=0.3,
-            system="You are a helpful assistant that creates concise, accurate summaries.",
-            messages=[
-                {"role": "user", "content": prompt}
-            ]
+            max_tokens=1024
         )
-        
-        # Extract the summary
-        summary = response.content[0].text
-        
+
         logger.info(f"Summary created: {len(summary)} characters")
         return summary
-        
+
     except Exception as e:
         logger.error(f"Error creating summary: {e}")
         # Provide a fallback summary in case of error

@@ -1,93 +1,100 @@
-import difflib
-from typing import List
+from typing import List, Optional
 
+from botspot.llm_provider import aquery_llm_text
 from loguru import logger
+
+# Import custom text utils for better overlap detection
+from pathlib import Path
+import sys
+
+# Add the dev/old directory to the path to import text_utils
+old_utils_path = Path(__file__).parent.parent.parent / "dev" / "old"
+sys.path.append(str(old_utils_path))
+from text_utils import merge_all_chunks, merge_two_chunks
 
 
 async def merge_transcription_chunks(
     transcription_chunks: List[str],
-    overlap_threshold: float = 0.5
+    buffer: int = 25,
+    match_cutoff: int = 15,
+    username: Optional[str] = None
 ) -> str:
     """
     Merge transcription chunks back together, handling overlaps intelligently.
-    
+
     Args:
         transcription_chunks: List of transcription texts
-        overlap_threshold: Threshold for determining overlap (0.0-1.0)
-        
+        buffer: Number of words to consider for overlap detection
+        match_cutoff: Minimum length of overlap to consider
+        username: Username for quota tracking
+
     Returns:
         Merged transcription text
     """
     if not transcription_chunks:
         return ""
-    
+
     if len(transcription_chunks) == 1:
         return transcription_chunks[0]
-    
+
     logger.info(f"Merging {len(transcription_chunks)} transcription chunks")
-    
-    # Start with the first chunk
-    merged_text = transcription_chunks[0]
-    
-    # Process each subsequent chunk
-    for i in range(1, len(transcription_chunks)):
-        current_chunk = transcription_chunks[i]
-        
-        # Find potential overlap between the end of the merged text and the start of the current chunk
-        overlap = find_best_overlap(merged_text, current_chunk, overlap_threshold)
-        
-        if overlap:
-            # Merge with overlap
-            overlap_len = len(overlap)
-            merged_text_end_pos = merged_text.rfind(overlap)
-            
-            # If we found a valid position for the overlap
-            if merged_text_end_pos != -1:
-                # Append only the part of the current chunk that comes after the overlap
-                merged_text = merged_text[:merged_text_end_pos] + current_chunk
-                logger.info(f"Merged chunk {i} with overlap of {overlap_len} characters")
-            else:
-                # Fallback: just append with a space
-                merged_text += " " + current_chunk
-                logger.info(f"Merged chunk {i} with space (no overlap found)")
-        else:
-            # No significant overlap found, just append with a space
-            merged_text += " " + current_chunk
-            logger.info(f"Merged chunk {i} with space (no significant overlap)")
-    
-    logger.info(f"Merged transcription: {len(merged_text)} characters")
-    return merged_text
+
+    # Use the custom merge_all_chunks function from text_utils
+    merged_text = merge_all_chunks(
+        transcription_chunks,
+        buffer=buffer,
+        match_cutoff=match_cutoff,
+        logger=logger
+    )
+
+    # Format the merged text using LLM to improve readability
+    try:
+        logger.info("Formatting merged text with LLM")
+        formatted_text = await format_text_with_llm(merged_text, username)
+        logger.info(f"Formatted text: {len(formatted_text)} characters")
+        return formatted_text
+    except Exception as e:
+        logger.error(f"Error formatting text: {e}")
+        return merged_text
 
 
-def find_best_overlap(text1: str, text2: str, threshold: float = 0.5, min_overlap_len: int = 10) -> str:
+async def format_text_with_llm(
+    text: str,
+    username: Optional[str] = None,
+    model: str = "gpt-4-1106-preview"
+) -> str:
     """
-    Find the best overlap between the end of text1 and the start of text2.
-    
+    Format text with LLM to improve readability.
+
     Args:
-        text1: First text
-        text2: Second text
-        threshold: Similarity threshold (0.0-1.0)
-        min_overlap_len: Minimum length of overlap to consider
-        
+        text: Text to format
+        username: Username for quota tracking
+        model: LLM model to use
+
     Returns:
-        The overlapping text, or empty string if no significant overlap found
+        Formatted text
     """
-    # Determine the maximum possible overlap length
-    max_overlap_len = min(len(text1), len(text2))
-    
-    # Start with the longest possible overlap and work down
-    for overlap_len in range(max_overlap_len, min_overlap_len - 1, -1):
-        # Get the end of text1 and start of text2 with the current overlap length
-        text1_end = text1[-overlap_len:]
-        text2_start = text2[:overlap_len]
-        
-        # Calculate similarity using difflib
-        similarity = difflib.SequenceMatcher(None, text1_end, text2_start).ratio()
-        
-        # If similarity is above threshold, we found a good overlap
-        if similarity >= threshold:
-            # Use the text from text2 as the overlap (could also use text1_end)
-            return text2_start
-    
-    # No significant overlap found
-    return ""
+    system_prompt = """
+    You're text formatting assistant. Your goal is:
+    - Add rich punctuation - new lines, quotes, dots and commas where appropriate
+    - Break the text into paragraphs using double new lines
+    - Keep the original text word-to-word, with only minor changes where absolutely necessary
+    - Fix grammar and typos only when they significantly impact readability
+    """
+
+    prompt = f"""
+    Please format the following transcription text to improve readability:
+
+    {text}
+    """
+
+    formatted_text = await aquery_llm_text(
+        prompt=prompt,
+        system_prompt=system_prompt,
+        model=model,
+        user=username,
+        temperature=0.3,
+        max_tokens=4096
+    )
+
+    return formatted_text

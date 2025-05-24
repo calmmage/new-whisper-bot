@@ -21,20 +21,19 @@ Old features / code that I will need
 ## Key components
 - [x] download
 - [x] convert
-  - [ ] add two separate implementations - with and without memory profiler. and a wrapper with a flag to select one
+  - [x] add two separate implementations - with and without memory profiler. and a wrapper with a flag to select one
 - [x] cut
-  - [ ] add two separate implementations - with and without memory profiler. and a wrapper with a flag to select one
+  - [x] add two separate implementations - with and without memory profiler. and a wrapper with a flag to select one
 - [x] parse chunks
-  - [x] use whisper (implemented with standard whisper library)
-  - [ ] add old rate limiter because we need one. use env var to monitor count
+  - [x] use OpenAI Whisper API with retry logic
+  - [x] add rate limiting with backoff retry
 - [x] merge & format
-  - [x] implemented with difflib for overlap detection
-  - [ ] find the logic in old wihsper bot and use that. difflib wouldn't do.
-  - [ ] add nice paragraph formatting and punctuation as in old bot
+  - [x] implemented with custom text_utils for overlap detection
+  - [x] find the logic in old wihsper bot and use that. difflib wouldn't do.
+  - [x] add nice paragraph formatting and punctuation as in old bot
 - [x] summarize
-  - [x] implemented with Claude API
-  - [ ] use botspot llm provider
-  - [ ] use tested system prompt
+  - [x] implemented with botspot llm provider
+  - [x] use tested system prompt
   - [ ] add an option for user to do additional freeform text requests in chat (1 follow-up?)
 
 For future, NOT NOW

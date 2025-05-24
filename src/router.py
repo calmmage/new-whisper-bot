@@ -50,9 +50,18 @@ async def main_chat_handler(message: Message, app: App, state: FSMContext):
     assert message.from_user is not None
     assert message.from_user.username is not None
 
-    transcription = await app.run(message.message_id, message.from_user.username)
-    await reply_safe(message, transcription)
+    username = message.from_user.username
 
-    # todo: also send summary to user
-    summary = await app.create_summary(transcription)
-    await reply_safe(message, summary)
+    # Send a processing message
+    notif = await reply_safe(message, "🔄 Processing your media file... This may take a few minutes.")
+
+    # Transcribe the audio
+    transcription = await app.run(message.message_id, username)
+    await reply_safe(message, transcription)
+    await notif.delete()
+
+    # Create and send summary
+    notif = await reply_safe(message, "🔄 Creating summary...")
+    summary = await app.create_summary(transcription, username=username)
+    await reply_safe(message, f"📋 <b>Summary:</b>\n\n{summary}")
+    await notif.delete()
