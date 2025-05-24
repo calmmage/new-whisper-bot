@@ -12,7 +12,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 # Import from src directory (run script from project root)
-from src.utils.download_media import download_file_3
+from src.utils.download_media import download_file_via_subprocess
 
 
 async def download_sample_files():
@@ -57,7 +57,7 @@ async def download_sample_files():
             print(f"From user: {message.from_user.username}")
             
             # Download the file
-            file_path = await download_file_3(
+            file_path = await download_file_via_subprocess(
                 message_id=message.id,
                 username=message.from_user.username,
                 target_dir=output_dir,

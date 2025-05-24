@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 from loguru import logger
 
 # Import our pyrogram download utility  
-from src.utils.download_media import download_file_3
+from src.utils.download_media import download_file_via_subprocess
 
 
 async def download_and_save_media(message: Message, media_type: str, bot: Bot):
@@ -33,7 +33,7 @@ async def download_and_save_media(message: Message, media_type: str, bot: Bot):
         bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
         
         # Use pyrogram to download (handles larger files than Bot API)
-        file_path = await download_file_3(
+        file_path = await download_file_via_subprocess(
             message_id=message.message_id,
             username=message.from_user.username,
             target_dir=output_dir,
@@ -69,32 +69,6 @@ async def main():
     @dp.message(F.text.startswith("/start"))
     async def start_handler(message: Message):
 
-
-        # import asyncio
-        import pickle
-
-        from dotenv import load_dotenv
-
-        load_dotenv()
-
-        # p = Path(__file__).parent.parent.parent / "scripts/sample_pyrogram_messages/sample_messages"
-        p = Path("/Users/petrlavrov/work/experiments/new-whisper-bot/scripts/sample_pyrogram_messages/sample_messages")
-        message = pickle.load(open(p / "sample_photo_attached.pkl", "rb"))
-        # message = pickle.load(open(p / "sample_audio_attached.pkl", "rb"))
-
-        api_id = os.getenv("TELEGRAM_API_ID")
-        if api_id is not None:
-            api_id = int(api_id)
-
-        res = await download_file_3(
-                message.id,
-                message.from_user.username,
-                api_id=api_id,
-                api_hash=os.getenv("TELEGRAM_API_HASH"),
-                bot_token=os.getenv("TELEGRAM_BOT_TOKEN"),
-            )
-        print(res)
-
         await message.reply(
             "🎵 Media Capture Bot\n\n"
             "Send me:\n"
@@ -103,7 +77,6 @@ async def main():
             "• Voice messages 🗣️\n"
             "• Video notes 📹\n\n"
             "I'll save them to the sample_data directory!"
-            "\n\nDownloaded: {res}"
         )
     
     # Handler for audio files

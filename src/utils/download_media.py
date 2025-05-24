@@ -2,6 +2,7 @@ import asyncio
 import os
 import pickle
 import re
+from loguru import logger
 import subprocess
 from pathlib import Path
 from typing import Optional, Union
@@ -89,25 +90,63 @@ def extract_file_name_from_pyrogram_message(
     return media.file_name
 
 
-async def download_file_1(
+async def download_file_from_aiogram_message(
     message: AiogramMessage,
     target_dir: Optional[Path] = None,
     file_name: Optional[str] = None,
     use_original_file_name: bool = True,
+    use_subprocess: bool = False,
 ):
     """
+    Download file from aiogram message.
+    
+    Args:
+        message: Aiogram message object
+        target_dir: Directory to save the file
+        file_name: Custom file name (optional)
+        use_original_file_name: Whether to use original file name
+        use_subprocess: If True, use subprocess to avoid aiogram/pyrogram conflicts
+    
     Returns: path to a file on disk
     """
     message_id = message.message_id
     assert message.from_user is not None
     username = message.from_user.username
 
-    return await download_file_2(
-        message_id, username, target_dir, file_name, use_original_file_name
-    )
+    if use_subprocess:
+        return await download_file_via_subprocess(
+            message_id, username, target_dir, file_name, use_original_file_name
+        )
+    else:
+        return await download_file_with_pyrogram(
+            message_id, username, target_dir, file_name, use_original_file_name
+        )
 
 
-async def download_file_2(
+def _check_aiogram_running():
+    """Check if aiogram is currently running and could conflict with pyrogram."""
+    # Check if aiogram modules are imported and active
+    
+    # Check for common aiogram patterns in the current event loop
+    try:
+        import asyncio
+        loop = asyncio.get_running_loop()
+        
+        # Check if there are tasks with aiogram-related names
+        for task in asyncio.all_tasks(loop):
+            task_name = str(task)
+            if any(name in task_name.lower() for name in ['aiogram', 'telegram', 'bot']):
+                logger.info(f"Found aiogram task: {task_name}")
+                return True
+                
+    except RuntimeError:
+        # No event loop running
+        pass
+    
+    return False
+
+
+async def download_file_with_pyrogram(
     message_id,
     username,
     target_dir: Optional[Path] = None,
@@ -117,6 +156,13 @@ async def download_file_2(
     api_hash: Optional[str] = None,
     bot_token: Optional[str] = None,
 ):
+    # Check for aiogram conflicts
+    if _check_aiogram_running():
+        raise RuntimeError(
+            "Pyrogram is incompatible with aiogram when running in the same event loop. "
+            "Use download_file_via_subprocess() instead to avoid conflicts."
+        )
+    
     pyrogram_client = await get_pyrogram_client(
         api_id=api_id, api_hash=api_hash, bot_token=bot_token
     )
@@ -140,7 +186,7 @@ async def download_file_2(
 
     return file_path
 
-async def download_file_3(
+async def download_file_via_subprocess(
     message_id,
     username,
     target_dir: Optional[Path] = None,
@@ -200,7 +246,14 @@ async def download_file_3(
     
     return Path(downloaded_file_path)
 
-
+__all__ = [
+    "download_file_from_aiogram_message",
+    "download_file_via_subprocess",
+    "download_file_with_pyrogram",
+    "get_pyrogram_client",
+    "get_media_and_media_type",
+    "extract_file_name_from_pyrogram_message",
+]
 
 if __name__ == "__main__":
     import argparse
@@ -218,7 +271,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     downloaded_file_path = asyncio.run(
-        download_file_2(
+        download_file_with_pyrogram(
             args.message_id,
             args.username,
             target_dir=args.target_dir,
