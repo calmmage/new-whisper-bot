@@ -18,7 +18,10 @@ async def cut_audio_into_pieces(
     rate_limit: int = 50  # Maximum number of chunks to create
 ) -> List[Path]:
     """
-    Cut audio file into smaller pieces with optional overlap.
+    Cut audio file into smaller pieces with overlap between consecutive chunks.
+    Creates overlapping chunks by calculating the appropriate start and end times
+    for each chunk, ensuring that each chunk (except the first) starts before the
+    previous chunk ends, creating the desired overlap.
 
     Args:
         audio_path: Path to the audio file
@@ -110,6 +113,7 @@ async def cut_audio_into_pieces_standard(
 ) -> List[Path]:
     """
     Standard implementation of cutting audio into pieces using ffmpeg.
+    Creates overlapping chunks by using multiple ffmpeg calls.
 
     Args:
         audio_path: Path to the audio file
@@ -128,30 +132,42 @@ async def cut_audio_into_pieces_standard(
     effective_chunk_duration = chunk_duration - overlap_duration
     chunk_paths = []
 
-    for i in range(num_chunks):
-        # Calculate start and end times for this chunk
-        start_time = i * effective_chunk_duration
-        end_time = min(start_time + chunk_duration, duration)
+    try:
+        # Calculate start times for each chunk with overlap
+        start_times = []
+        current_time = 0
 
-        # Skip if we've reached the end of the audio
-        if start_time >= duration:
-            break
+        while current_time < duration:
+            start_times.append(current_time)
+            current_time += effective_chunk_duration
 
-        # Create output path for this chunk
-        chunk_path = output_dir / f"{audio_path.stem}_chunk_{i+1:03d}.{format}"
+            # Don't go beyond the duration of the audio
+            if current_time >= duration:
+                break
 
-        try:
-            # Build the ffmpeg command
+        logger.info(f"Creating {len(start_times)} chunks with {overlap_duration}s overlap")
+
+        # Create each chunk with the specified overlap
+        for i, start_time in enumerate(start_times):
+            # Calculate end time (with overlap)
+            end_time = min(start_time + chunk_duration, duration)
+
+            # Create output path for this chunk
+            chunk_path = output_dir / f"{audio_path.stem}_chunk_{i:03d}.{format}"
+
+            # Build the ffmpeg command for this chunk
             cmd = [
                 "ffmpeg",
                 "-i", str(audio_path),  # Input file
                 "-ss", str(start_time),  # Start time
-                "-to", str(end_time),  # End time
+                "-to", str(end_time),  # End time (including overlap)
                 "-c:a", "libmp3lame" if format == "mp3" else format,  # Audio codec
                 "-q:a", "2",  # Audio quality (0-9, 0=best)
                 "-y",  # Overwrite output file if it exists
                 str(chunk_path)  # Output file
             ]
+
+            logger.debug(f"Creating chunk {i+1}: start={start_time:.2f}s, end={end_time:.2f}s, duration={(end_time-start_time):.2f}s")
 
             # Run the command
             process = subprocess.Popen(
@@ -165,14 +181,14 @@ async def cut_audio_into_pieces_standard(
 
             if process.returncode != 0:
                 error_msg = stderr.decode() if stderr else "Unknown error"
-                raise RuntimeError(f"FFmpeg cutting failed: {error_msg}")
+                raise RuntimeError(f"FFmpeg cutting failed for chunk {i+1}: {error_msg}")
 
-            logger.info(f"Created chunk {i+1}/{num_chunks}: {chunk_path}")
+            logger.info(f"Created chunk {i+1}/{len(start_times)}: {chunk_path}")
             chunk_paths.append(chunk_path)
 
-        except Exception as e:
-            logger.error(f"Error cutting audio chunk {i+1}: {e}")
-            raise
+    except Exception as e:
+        logger.error(f"Error cutting audio into pieces: {e}")
+        raise
 
     return chunk_paths
 
@@ -188,6 +204,7 @@ async def cut_audio_into_pieces_with_profiler(
 ) -> List[Path]:
     """
     Memory-profiled implementation of cutting audio into pieces using ffmpeg.
+    Creates overlapping chunks by using multiple ffmpeg calls while monitoring memory usage.
 
     Args:
         audio_path: Path to the audio file
@@ -207,30 +224,42 @@ async def cut_audio_into_pieces_with_profiler(
     chunk_paths = []
     all_memory_stats = []
 
-    for i in range(num_chunks):
-        # Calculate start and end times for this chunk
-        start_time = i * effective_chunk_duration
-        end_time = min(start_time + chunk_duration, duration)
+    try:
+        # Calculate start times for each chunk with overlap
+        start_times = []
+        current_time = 0
 
-        # Skip if we've reached the end of the audio
-        if start_time >= duration:
-            break
+        while current_time < duration:
+            start_times.append(current_time)
+            current_time += effective_chunk_duration
 
-        # Create output path for this chunk
-        chunk_path = output_dir / f"{audio_path.stem}_chunk_{i+1:03d}.{format}"
+            # Don't go beyond the duration of the audio
+            if current_time >= duration:
+                break
 
-        try:
-            # Build the ffmpeg command
+        logger.info(f"Creating {len(start_times)} chunks with {overlap_duration}s overlap")
+
+        # Create each chunk with the specified overlap
+        for i, start_time in enumerate(start_times):
+            # Calculate end time (with overlap)
+            end_time = min(start_time + chunk_duration, duration)
+
+            # Create output path for this chunk
+            chunk_path = output_dir / f"{audio_path.stem}_chunk_{i:03d}.{format}"
+
+            # Build the ffmpeg command for this chunk
             cmd = [
                 "ffmpeg",
                 "-i", str(audio_path),  # Input file
                 "-ss", str(start_time),  # Start time
-                "-to", str(end_time),  # End time
+                "-to", str(end_time),  # End time (including overlap)
                 "-c:a", "libmp3lame" if format == "mp3" else format,  # Audio codec
                 "-q:a", "2",  # Audio quality (0-9, 0=best)
                 "-y",  # Overwrite output file if it exists
                 str(chunk_path)  # Output file
             ]
+
+            logger.debug(f"Creating chunk {i+1}: start={start_time:.2f}s, end={end_time:.2f}s, duration={(end_time-start_time):.2f}s")
 
             # Start memory profiling
             memory_stats = []
@@ -272,7 +301,7 @@ async def cut_audio_into_pieces_with_profiler(
 
                 if process.returncode != 0:
                     error_msg = stderr.decode() if stderr else "Unknown error"
-                    raise RuntimeError(f"FFmpeg cutting failed: {error_msg}")
+                    raise RuntimeError(f"FFmpeg cutting failed for chunk {i+1}: {error_msg}")
 
             finally:
                 # Ensure process is terminated
@@ -289,17 +318,17 @@ async def cut_audio_into_pieces_with_profiler(
                 avg_memory = sum(stat['rss'] for stat in memory_stats) / len(memory_stats) / (1024*1024)
                 logger.info(f"Chunk {i+1} memory usage: Peak={peak_memory:.2f}MB, Average={avg_memory:.2f}MB")
 
-            logger.info(f"Created chunk {i+1}/{num_chunks}: {chunk_path}")
+            logger.info(f"Created chunk {i+1}/{len(start_times)}: {chunk_path}")
             chunk_paths.append(chunk_path)
 
-        except Exception as e:
-            logger.error(f"Error cutting audio chunk {i+1}: {e}")
-            raise
+        # Log overall memory usage statistics
+        if all_memory_stats:
+            peak_memory = max(stat['rss'] for stat in all_memory_stats) / (1024*1024)
+            avg_memory = sum(stat['rss'] for stat in all_memory_stats) / len(all_memory_stats) / (1024*1024)
+            logger.info(f"Overall memory usage statistics: Peak={peak_memory:.2f}MB, Average={avg_memory:.2f}MB")
 
-    # Log overall memory usage statistics
-    if all_memory_stats:
-        peak_memory = max(stat['rss'] for stat in all_memory_stats) / (1024*1024)
-        avg_memory = sum(stat['rss'] for stat in all_memory_stats) / len(all_memory_stats) / (1024*1024)
-        logger.info(f"Overall memory usage statistics: Peak={peak_memory:.2f}MB, Average={avg_memory:.2f}MB")
+    except Exception as e:
+        logger.error(f"Error cutting audio into pieces: {e}")
+        raise
 
     return chunk_paths
