@@ -1,6 +1,8 @@
+import asyncio
 import os
 import pickle
-from functools import lru_cache
+import re
+import subprocess
 from pathlib import Path
 from typing import Optional, Union
 
@@ -11,16 +13,22 @@ from pyrogram.types import Photo, Video, VideoNote, Voice
 
 PyrogramMedia = Union[Document, Audio, Video, Voice, VideoNote, Photo]
 
+# Global client cache
+_pyrogram_client = None
 
-@lru_cache
+
 async def get_pyrogram_client(
     api_id: Optional[int] = None,
     api_hash: Optional[str] = None,
     bot_token: Optional[str] = None,
 ):
-    # telegram bot token,
-    # api_id
-    # api_hash
+    global _pyrogram_client
+    
+    # Return existing client if available
+    if _pyrogram_client is not None:
+        return _pyrogram_client
+    
+    # telegram bot token, api_id, api_hash
     if api_id is None:
         from botspot import get_dependency_manager
 
@@ -35,17 +43,17 @@ async def get_pyrogram_client(
     if bot_token is None:
         bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
 
-    from pyrogram import Client
+    from pyrogram.client import Client
 
     assert api_id is not None
     assert api_hash is not None
     assert bot_token is not None
 
-    pyrogram_client = Client(
+    _pyrogram_client = Client(
         "telegram_downloader", api_id=api_id, api_hash=api_hash, bot_token=bot_token
     )
-    await pyrogram_client.start()
-    return pyrogram_client
+    await _pyrogram_client.start()
+    return _pyrogram_client
 
 
 def get_media_and_media_type(msg: PyrogramMessage) -> tuple[PyrogramMedia, str, str]:
@@ -132,28 +140,94 @@ async def download_file_2(
 
     return file_path
 
+async def download_file_3(
+    message_id,
+    username,
+    target_dir: Optional[Path] = None,
+    file_name: Optional[str] = None,
+    use_original_file_name: bool = True,
+    api_id: Optional[int] = None,
+    api_hash: Optional[str] = None,
+    bot_token: Optional[str] = None,
+):
+    """
+    Download file using subprocess to avoid pyrogram/aiogram conflicts.
+    Runs this same script as a standalone process.
+    """
+    # pyrogram doesn't work with aiogram, so we need to run this script as a separate process
+    script_path = Path(__file__)
+
+    # Build command arguments
+    cmd = [
+        "python", str(script_path),
+        "--message_id", str(message_id),
+        "--username", username,
+        "--api_id", str(api_id),
+        "--api_hash", api_hash,
+        "--bot_token", bot_token,
+    ]
+    
+    if target_dir is not None:
+        cmd.extend(["--target_dir", str(target_dir)])
+    
+    if file_name is not None:
+        cmd.extend(["--file_name", file_name])
+    
+    if use_original_file_name:
+        cmd.append("--use_original_file_name")
+
+    # Run subprocess asynchronously
+    process = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE
+    )
+    
+    stdout, stderr = await process.communicate()
+    
+    if process.returncode != 0:
+        error_msg = stderr.decode() if stderr else "Unknown error"
+        raise RuntimeError(f"Download subprocess failed: {error_msg}")
+    
+    script_output = stdout.decode()
+    
+    # Parse downloaded file path from script output with regex
+    match = re.search(r"Downloaded file path: (.*)", script_output)
+    if not match:
+        raise RuntimeError(f"Could not parse downloaded file path from output: {script_output}")
+    
+    downloaded_file_path = match.group(1).strip()
+    
+    return Path(downloaded_file_path)
+
+
 
 if __name__ == "__main__":
-    import asyncio
+    import argparse
+    parser = argparse.ArgumentParser(description="Download media from Telegram")
 
-    from dotenv import load_dotenv
+    parser.add_argument("--message_id", type=int, required=True)
+    parser.add_argument("--username", type=str, required=True)
+    parser.add_argument("--target_dir", type=Path, required=False)
+    parser.add_argument("--file_name", type=str, required=False)
+    parser.add_argument("--use_original_file_name", action="store_true")
+    parser.add_argument("--api_id", type=int, required=True)
+    parser.add_argument("--api_hash", type=str, required=True)
+    parser.add_argument("--bot_token", type=str, required=True)
 
-    load_dotenv()
+    args = parser.parse_args()
 
-    p = Path(__file__).parent / "mocking_pyrogram_message_types" / "sample_messages"
-    message = pickle.load(open(p / "sample_photo_attached.pkl", "rb"))
-
-    api_id = os.getenv("TELEGRAM_API_ID")
-    if api_id is not None:
-        api_id = int(api_id)
-    
-    res = asyncio.run(
+    downloaded_file_path = asyncio.run(
         download_file_2(
-            message.id,
-            message.from_user.username,
-            api_id=api_id,
-            api_hash=os.getenv("TELEGRAM_API_HASH"),
-            bot_token=os.getenv("TELEGRAM_BOT_TOKEN"),
+            args.message_id,
+            args.username,
+            target_dir=args.target_dir,
+            file_name=args.file_name,
+            use_original_file_name=args.use_original_file_name,
+            api_id=args.api_id,
+            api_hash=args.api_hash,
+            bot_token=args.bot_token,
         )
     )
-    print(res)
+
+    print(f"Downloaded file path: {downloaded_file_path}")

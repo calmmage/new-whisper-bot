@@ -29,6 +29,8 @@ langchain = "*"
 langchain-openai = "*"
 langchain-community = "*"
 langchain-anthropic = "*"
+tgcrypto = "^1.2.5"
+pyrogram = "^2.0.106"
 
 [tool.poetry.group.extras.dependencies]
 # dependencies for extra features

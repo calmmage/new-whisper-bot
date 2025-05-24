@@ -10,6 +10,7 @@ config*.toml
 *.code-workspace
 .specstory
 *.session
+*.session-journal
 sample_messages
 
 # ----------------------------------------

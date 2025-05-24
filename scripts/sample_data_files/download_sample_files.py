@@ -11,12 +11,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-# Add src to path to import our utils
-import sys
-project_root = Path(__file__).parent.parent.parent
-sys.path.append(str(project_root / "src"))
-
-from utils.download_media import download_file_2
+# Import from src directory (run script from project root)
+from src.utils.download_media import download_file_3
 
 
 async def download_sample_files():
@@ -61,7 +57,7 @@ async def download_sample_files():
             print(f"From user: {message.from_user.username}")
             
             # Download the file
-            file_path = await download_file_2(
+            file_path = await download_file_3(
                 message_id=message.id,
                 username=message.from_user.username,
                 target_dir=output_dir,
