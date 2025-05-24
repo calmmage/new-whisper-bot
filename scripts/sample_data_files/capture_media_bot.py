@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 from loguru import logger
 
 # Import our pyrogram download utility  
-from src.utils.download_media import download_file_via_subprocess
+from src.utils.download_media import download_file_via_subprocess, _check_aiogram_running
 
 
 async def download_and_save_media(message: Message, media_type: str, bot: Bot):
@@ -77,6 +77,7 @@ async def main():
             "• Voice messages 🗣️\n"
             "• Video notes 📹\n\n"
             "I'll save them to the sample_data directory!"
+            f"\n\nCheck aiogram running: {_check_aiogram_running()}"
         )
     
     # Handler for audio files

@@ -1,9 +1,7 @@
 import asyncio
 import os
-import pickle
 import re
 from loguru import logger
-import subprocess
 from pathlib import Path
 from typing import Optional, Union
 
@@ -135,7 +133,7 @@ def _check_aiogram_running():
         # Check if there are tasks with aiogram-related names
         for task in asyncio.all_tasks(loop):
             task_name = str(task)
-            if any(name in task_name.lower() for name in ['aiogram', 'telegram', 'bot']):
+            if any(name in task_name.lower() for name in ['aiogram']):
                 logger.info(f"Found aiogram task: {task_name}")
                 return True
                 
@@ -155,9 +153,10 @@ async def download_file_with_pyrogram(
     api_id: Optional[int] = None,
     api_hash: Optional[str] = None,
     bot_token: Optional[str] = None,
+    check_aiogram: bool = True,
 ):
     # Check for aiogram conflicts
-    if _check_aiogram_running():
+    if check_aiogram and _check_aiogram_running():
         raise RuntimeError(
             "Pyrogram is incompatible with aiogram when running in the same event loop. "
             "Use download_file_via_subprocess() instead to avoid conflicts."
@@ -253,6 +252,7 @@ __all__ = [
     "get_pyrogram_client",
     "get_media_and_media_type",
     "extract_file_name_from_pyrogram_message",
+    "_check_aiogram_running",
 ]
 
 if __name__ == "__main__":
@@ -280,6 +280,7 @@ if __name__ == "__main__":
             api_id=args.api_id,
             api_hash=args.api_hash,
             bot_token=args.bot_token,
+            check_aiogram=False,  # Disable aiogram check in subprocess
         )
     )
 
