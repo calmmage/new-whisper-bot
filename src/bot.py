@@ -3,14 +3,14 @@ from pathlib import Path
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
-from calmlib.utils import setup_logger, heartbeat_for_sync
+from botspot.core.bot_manager import BotManager
+from calmlib.utils import heartbeat_for_sync, setup_logger
 from dotenv import load_dotenv
 from loguru import logger
 
-from src._app import App
+from src.app import App
 from src.router import router as main_router
 from src.routers.settings import router as settings_router
-from botspot.core.bot_manager import BotManager
 
 
 # @heartbeat_for_sync(App.name)

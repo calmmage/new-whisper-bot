@@ -1,7 +1,6 @@
 from aiogram import Router
 from aiogram.filters import Command
 from aiogram.types import Message
-
 from botspot.commands_menu import botspot_command
 from botspot.user_interactions import ask_user, ask_user_choice
 from botspot.utils import reply_safe
@@ -14,7 +13,13 @@ TIMEZONE_SETUP_METHODS = [
     "Select from common timezones",
 ]
 
-COMMON_TIMEZONES = ["UTC", "Europe/London", "Europe/Paris", "America/New_York", "Asia/Tokyo"]
+COMMON_TIMEZONES = [
+    "UTC",
+    "Europe/London",
+    "Europe/Paris",
+    "America/New_York",
+    "Asia/Tokyo",
+]
 
 
 @botspot_command("timezone", "Set your timezone", visibility="hidden")
@@ -24,7 +29,10 @@ async def timezone_setup(message: Message, state) -> None:
 
     # First, ask user how they want to set their timezone
     method = await ask_user_choice(
-        message.chat.id, "How would you like to set your timezone?", TIMEZONE_SETUP_METHODS, state
+        message.chat.id,
+        "How would you like to set your timezone?",
+        TIMEZONE_SETUP_METHODS,
+        state,
     )
 
     if not method:
@@ -43,7 +51,8 @@ async def timezone_setup(message: Message, state) -> None:
 
     elif method == TIMEZONE_SETUP_METHODS[1]:  # Location
         await reply_safe(
-            message, "Please send your location. Note: This feature is not implemented yet."
+            message,
+            "Please send your location. Note: This feature is not implemented yet.",
         )
         # You would implement location handling here
 

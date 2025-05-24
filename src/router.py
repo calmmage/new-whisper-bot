@@ -1,10 +1,19 @@
-from aiogram import Router, html
-from aiogram.filters import Command, CommandStart
-from aiogram.types import Message
-from botspot import commands_menu
-from botspot.utils import send_safe
+import threading
+import time
+from pathlib import Path
 
-from src._app import App
+import psutil
+from aiogram import F, Router, html
+from aiogram.filters import Command, CommandStart
+from aiogram.fsm.context import FSMContext
+from aiogram.types import Message
+from botspot import commands_menu, reply_safe
+from botspot.utils import send_safe
+from botspot.utils.unsorted import get_message_attachments
+from loguru import logger
+
+from app import App
+from src.app import App
 
 router = Router()
 
@@ -20,17 +29,30 @@ async def start_handler(message: Message, app: App):
     )
 
 
-@commands_menu.botspot_command("help", "Show this help message")
-@router.message(Command("help"))
-async def help_handler(message: Message, app: App):
-    """Basic help command handler"""
-    await send_safe(
-        message.chat.id,
-        f"This is {app.name}. Use /start to begin."
-        "Available commands:\n"
-        "/start - Start the bot\n"
-        "/help - Show this help message\n"
-        "/help_botspot - Show Botspot help\n"
-        "/timezone - Set your timezone\n"
-        "/error_test - Test error handling",
-    )
+# @commands_menu.botspot_command("help", "Show this help message")
+# @router.message(Command("help"))
+# async def help_handler(message: Message, app: App):
+#     """Basic help command handler"""
+#     await send_safe(
+#         message.chat.id,
+#         f"This is {app.name}. Use /start to begin."
+#         "Available commands:\n"
+#         "/start - Start the bot\n"
+#         "/help - Show this help message\n"
+#         "/help_botspot - Show Botspot help\n"
+#         "/timezone - Set your timezone\n"
+#         "/error_test - Test error handling",
+#     )
+
+
+@router.message(F.audio | F.voice | F.video | F.document | F.video_note)
+async def main_chat_handler(message: Message, app: App, state: FSMContext):
+    assert message.from_user is not None
+    assert message.from_user.username is not None
+
+    transcription = await app.run(message.message_id, message.from_user.username)
+    await reply_safe(message, transcription)
+
+    # todo: also send summary to user
+    summary = await app.create_summary(transcription)
+    await reply_safe(message, summary)
