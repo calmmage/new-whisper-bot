@@ -190,12 +190,12 @@ async def download_file_with_pyrogram(
 async def download_file_via_subprocess(
     message_id,
     username,
+    api_id: int,
+    api_hash: str,
+    bot_token: str,
     target_dir: Optional[Path] = None,
     file_name: Optional[str] = None,
     use_original_file_name: bool = True,
-    api_id: Optional[int] = None,
-    api_hash: Optional[str] = None,
-    bot_token: Optional[str] = None,
 ):
     """
     Download file using subprocess to avoid pyrogram/aiogram conflicts.
@@ -203,6 +203,9 @@ async def download_file_via_subprocess(
     """
     # pyrogram doesn't work with aiogram, so we need to run this script as a separate process
     script_path = Path(__file__)
+    assert bot_token is not None
+    assert api_id is not None
+    assert api_hash is not None
 
     # Build command arguments
     cmd = [

@@ -53,4 +53,7 @@ For future, NOT NOW
 - [ ] add 3 models - 'whisper-1', 'gpt-4o-mini-transcribe', 'gpt-4o-transcribe'
   - [ ] compare prices (using check-script? transcribe a small audio first to see model response format and if it has prices / tokens)
   - [ ] allow user to pick which model to use for transcription (use ask_user_choice), default - whisper-1
-  - [ ] 
+- [ ] cleanup - delete all final and intermediary media files
+  - [ ] original video / audio file
+  - [ ] chunks
+  - [ ] converted to mp3

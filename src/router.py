@@ -6,7 +6,6 @@ from botspot import commands_menu, reply_safe
 from botspot.user_interactions import ask_user_choice
 from botspot.utils import send_safe
 
-from app import App
 from src.app import App
 
 router = Router()

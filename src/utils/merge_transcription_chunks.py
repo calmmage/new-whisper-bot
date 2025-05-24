@@ -1,16 +1,9 @@
-import sys
-
-# Import custom text utils for better overlap detection
-from pathlib import Path
 from typing import List, Optional
 
 from botspot.llm_provider import aquery_llm_text
 from loguru import logger
 
-# Add the dev/old directory to the path to import text_utils
-old_utils_path = Path(__file__).parent.parent.parent / "dev" / "old"
-sys.path.append(str(old_utils_path))
-from text_utils import merge_all_chunks
+from src.utils.text_utils import merge_all_chunks
 
 
 async def merge_transcription_chunks(

@@ -8,7 +8,7 @@ from pydantic_settings import BaseSettings
 from src.utils.convert_to_mp3 import convert_to_mp3
 from src.utils.create_summary import create_summary
 from src.utils.cut_audio import cut_audio_into_pieces
-from src.utils.download_media import download_file_from_aiogram_message
+from src.utils.download_media import download_file_via_subprocess
 from src.utils.merge_transcription_chunks import merge_transcription_chunks
 from src.utils.parse_audio_chunks import parse_audio_chunks
 
@@ -17,9 +17,13 @@ class AppConfig(BaseSettings):
     """Basic app configuration"""
 
     telegram_bot_token: SecretStr
+    telegram_api_id: int
+    telegram_api_hash: SecretStr
+
     openai_api_key: Optional[SecretStr] = None
     use_memory_profiler: bool = False
 
+    # todo: delete unused fields
     # Whisper API and audio chunking settings
     # whisper_chunk_duration: int = 600  # 10 minutes in seconds
     whisper_chunk_duration: int = 120  # 2 minutes in seconds
@@ -33,9 +37,9 @@ class AppConfig(BaseSettings):
     whisper_max_concurrent: int = 50  # Maximum number of concurrent API calls
     # todo: file size limit is 25 megabytes - look out for that instead..
 
-    target_chunk_count = 20
-    max_chunk_size = 20 * 60  # 20 min
-    min_chunk_size = 2 * 60  # 2 min
+    target_chunk_count: int = 20
+    max_chunk_size: int = 20 * 60  # 20 min
+    min_chunk_size: int = 2 * 60  # 2 min
 
     class Config:
         env_file = ".env"
@@ -126,8 +130,15 @@ class App(AppBase):
     async def download_media(self, message_id: int, username: str) -> Path:
         """Download media from message using aiogram"""
         # Use subprocess to avoid aiogram/pyrogram conflicts
-        return await download_file_from_aiogram_message(
-            message_id=message_id, username=username, use_subprocess=True
+        # return await download_file_from_aiogram_message(
+        #     message_id=message_id, username=username, use_subprocess=True
+        # )
+        return await download_file_via_subprocess(
+            message_id=message_id,
+            username=username,
+            bot_token=self.config.telegram_bot_token.get_secret_value(),
+            api_id=self.config.telegram_api_id,
+            api_hash=self.config.telegram_api_hash.get_secret_value(),
         )
 
     async def convert_video_to_audio(self, media_path: Path) -> Path:
