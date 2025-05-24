@@ -1,0 +1,18 @@
+Summarize key points from the conversation and exportable artifacts
+explicitly make a list of 
+- action points for specific people
+- general action points - cued by the explicit phrases "we should do this" etc.
+- other meaningful groups 
+
+Format should be with specific simple bullet points
+"""
+Artifact name
+- point 1
+- point 2
+
+Group 2
+- point 3
+- point 4
+"""
+
+Summary should be in the language of the original 
