@@ -1,6 +1,8 @@
 from difflib import SequenceMatcher
 from typing import Iterable
 
+import loguru
+
 
 def normalize_text(text):
     return text.lower().replace(".", "").replace(",", "")
@@ -26,7 +28,7 @@ def find_segment_pos(segment: str, text: str):
     beg = 0
     i = 0
     j = 0
-    while i < len(segment):
+    while i < len(segment) and j < len(text):
         if i == 0:
             beg = j
         if not segment[i].isalnum():
@@ -45,8 +47,6 @@ def find_segment_pos(segment: str, text: str):
                 j = beg + 1
             else:
                 j += 1
-        if j >= len(text):
-            break
 
     return beg, j
 
@@ -100,8 +100,11 @@ def merge_all_chunks(
     logger=None,
 ):
     """merge chunks using reduce method"""
+    # Filter out empty or whitespace-only chunks
+    filtered_chunks = [chunk.strip() for chunk in chunks if chunk and chunk.strip()]
+
     result = ""
-    for chunk in chunks:
+    for chunk in filtered_chunks:
         result = merge_two_chunks(
             result, chunk, buffer=buffer, match_cutoff=match_cutoff, logger=logger
         )
