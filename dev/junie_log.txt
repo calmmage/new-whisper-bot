@@ -1,0 +1,54 @@
+# Follow-up 1
+
+There are several significant modifications to what you did
+1) look at todo.md again: i've mentioned that I want two separate implementations of ffmpeg subprocesses because i need to run memory profile to know what size server limits to run
+
+2) in my library botspot I have a shared llm_provider. It has to be used for all llm operations. look up at botspot_101.md. it accepts username to track quotas and stuff
+You have to use that for summary request
+
+3) the duplicate detection you did wouldn't do. I implemented custom logic here, use that: text_utils.
+well, modernize it to use llm_provider and cheapest new model (gpt 4.1 nano>?)
+4) what the fuck is that? didn't God invent async exactly for that? I only wanted to use subprocess out of necessity in other places - because i need to use ffmpeg directly and inplace (pydub hoggles memory like crazy)
+ # Run the transcription in a separate thread to avoid blocking the event loop
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(
+            None,
+            lambda: model.transcribe(
+                str(audio_path),
+                language=language,
+                fp16=(device == "cuda")
+            )
+        )
+
+- redo that. And.. what the fuck is this. import openai and use whisper from there (API!!!). make sure we have openai api token.
+
+NO PYTORCH!! WHAT ARE YOU DOING??!!!
+
+Also, make sure we have retry with backoff, because I WANT ALL JOBS TO FINISH NO MATTER WHAT. I AM CUTTING AUDIO in 50 pieces and I NEED ALL OF THEM
+
+
+# Follow-up 2
+
+1) let's actually create scripts to test all the utils separately on sample files.
+We can test the following:
+- convert video to audio (create a script in scripts/check_convert_video)
+- cut audio (same, script in scripts/..)
+
+By the way, did you implement audio cutting by ffmpeg in-place without excessive memory usage?
+and are you running in async non-blocking subprocess?
+
+- parse audio (i will put a working gpt token in env)
+Make sure to save all results to file and add sanity checks on them (e.g. number of files after cutting, file size/format after conversion etc.)
+
+# Follow-up 3
+
+Remind me, how are we configuring chunk sizes?
+whisper api accepts max 50 files concurrently (cut them and then launch them all right away), so for optimal peroformance that was the targeting amount of files.. Also, i don't think it takes chunks above 20 minutes or something, maybe 10.
+Just in case several users submit us files simultaneously, i was thinking to avoid cutting to all 50 for smaller files.
+Did you even check the logic that calculates optimal amount of chunks to cut audio in? DEFAULT_PERIOD, DEFAULT_WHISPER_RATE_LIMIT.
+I don't know what is the limit on my account, but we need to play around that. Even more so - there's rate limit and there's concurrent connections limit, i think. We need to handle that properly. (assume some defaults, accept corrections from env)
+
+1) how do we pass to the cutting util the desired parameters (and then how does it transfer that to ffmpeg? Is the assumed properties tested in our check script?)
+2) where do you pass them?
+
+Make an analysis about other files and utils if there are similar requirements that you missed. Save that analysis to a txt file, with a short summary in the end.
