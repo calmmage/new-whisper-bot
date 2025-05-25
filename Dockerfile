@@ -2,10 +2,10 @@ FROM python:3.12-slim-bookworm
 
 WORKDIR /app
 
-# Install system dependencies
+# Update and install FFmpeg
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends curl && \
-    rm -rf /var/lib/apt/lists/*
+    apt-get install -y --no-install-recommends curl ffmpeg gcc build-essential && \
+    rm -rf /var/lib/apt/lists/* \
 
 # Install poetry
 RUN pip install --no-cache-dir poetry
