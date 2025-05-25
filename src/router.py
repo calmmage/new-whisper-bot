@@ -2,7 +2,7 @@ from aiogram import F, Router, html
 from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
-from botspot import commands_menu, reply_safe, answer_safe, get_message_text
+from botspot import answer_safe, commands_menu, get_message_text, reply_safe
 from botspot.components.new.llm_provider import aquery_llm_text
 from botspot.user_interactions import ask_user_choice
 from botspot.utils import send_safe

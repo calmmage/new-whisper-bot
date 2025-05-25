@@ -1,6 +1,6 @@
 from unittest.mock import Mock
 
-from src.utils.text_utils import merge_two_chunks, merge_all_chunks, find_segment_pos
+from src.utils.text_utils import find_segment_pos, merge_all_chunks, merge_two_chunks
 
 
 class TestMergeTwoChunks:

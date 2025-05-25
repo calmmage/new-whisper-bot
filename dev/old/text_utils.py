@@ -5,7 +5,6 @@ from bot_base.utils.gpt_utils import (
     token_limit_by_model,
 )
 
-
 FORMAT_TEXT_COMMAND = """
 You're text formatting assistant. Your goal is:
 - Add rich punctuation - new lines, quotes, dots and commas where appropriate

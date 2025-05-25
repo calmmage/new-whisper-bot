@@ -14,10 +14,7 @@ from dotenv import load_dotenv
 from loguru import logger
 
 # Import our pyrogram download utility
-from src.core.download_media import (
-    _check_aiogram_running,
-    download_file_via_subprocess,
-)
+from src.core.download_media import _check_aiogram_running, download_file_via_subprocess
 
 
 async def download_and_save_media(message: Message, media_type: str, bot: Bot):

@@ -20,7 +20,15 @@ class AppConfig(BaseSettings):
     telegram_api_id: int
     telegram_api_hash: SecretStr
 
+    # todo: use
+    transcription_model: str = "whisper-1"  # Default transcription model
     summary_model: str = "claude-4-sonnet"
+    # todo: use
+    chat_model: str = (
+        "claude-4-sonnet"  # Default chat model for discussing transcripts and summaries
+    )
+    # todo: use
+    formatting_model: str = "gpt-4.1-nano"
 
     downloads_dir: Path = Path("downloads").absolute()
     cleanup_downloads: bool = True

@@ -1,8 +1,8 @@
+from textwrap import dedent
 from typing import Optional
 
 from botspot.llm_provider import aquery_llm_text
 from loguru import logger
-from textwrap import dedent
 
 
 async def create_summary(

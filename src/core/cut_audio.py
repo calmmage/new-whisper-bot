@@ -6,7 +6,6 @@ from typing import List, Optional
 import psutil
 from loguru import logger
 
-
 DEFAULT_CHUNK_DURATION: int = (60,)  # 1 minute for testing
 DEFAULT_OVERLAP_DURATION: int = (5,)  # 5 seconds overlap
 
@@ -123,7 +122,7 @@ async def cut_audio_into_pieces(
 
     # Choose the appropriate implementation based on the flag
     if use_memory_profiler:
-        return await cut_audio_into_pieces_with_profiler(
+        return await _cut_audio_into_pieces_with_profiler(
             audio_path,
             output_dir,
             duration,
@@ -133,7 +132,7 @@ async def cut_audio_into_pieces(
             format,
         )
     else:
-        return await cut_audio_into_pieces_standard(
+        return await _cut_audio_into_pieces_standard(
             audio_path,
             output_dir,
             duration,
@@ -144,7 +143,7 @@ async def cut_audio_into_pieces(
         )
 
 
-async def cut_audio_into_pieces_standard(
+async def _cut_audio_into_pieces_standard(
     audio_path: Path,
     output_dir: Path,
     duration: float,
@@ -245,7 +244,7 @@ async def cut_audio_into_pieces_standard(
     return chunk_paths
 
 
-async def cut_audio_into_pieces_with_profiler(
+async def _cut_audio_into_pieces_with_profiler(
     audio_path: Path,
     output_dir: Path,
     duration: float,

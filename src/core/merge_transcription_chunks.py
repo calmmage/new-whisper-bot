@@ -2,7 +2,7 @@ from typing import List, Optional
 
 from loguru import logger
 
-from src.utils.text_utils import merge_all_chunks, DEFAULT_BUFFER, DEFAULT_MATCH_CUTOFF
+from src.utils.text_utils import DEFAULT_BUFFER, DEFAULT_MATCH_CUTOFF, merge_all_chunks
 
 
 async def merge_transcription_chunks(
