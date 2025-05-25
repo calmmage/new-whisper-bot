@@ -20,6 +20,8 @@ class AppConfig(BaseSettings):
     telegram_api_id: int
     telegram_api_hash: SecretStr
 
+    summary_model: str = "claude-4-sonnet"
+
     downloads_dir: Path = Path("downloads").absolute()
     cleanup_downloads: bool = True
 
@@ -48,21 +50,6 @@ class AppConfig(BaseSettings):
         env_file = ".env"
         env_file_encoding = "utf-8"
         extra = "ignore"
-
-
-# todo: use this.
-def calculate_optimal_chunk_size(
-    audio_size,
-    target_chunk_count=20,
-    max_chunk_size=20 * 60,  # 20 min,
-    min_chunk_size=2 * 60,  # 2 min,
-):
-    target_chunk_size = int(audio_size / target_chunk_count)
-    if target_chunk_size < min_chunk_size:
-        return min_chunk_size
-    if target_chunk_size > max_chunk_size:
-        return max_chunk_size
-    return target_chunk_size
 
 
 class AppBase(ABC):
@@ -196,8 +183,6 @@ class App(AppBase):
         """Merge transcription pieces back together using custom text_utils"""
         return await merge_transcription_chunks(
             transcription_chunks=transcription_pieces,
-            buffer=25,
-            match_cutoff=15,
             username=username,
         )
 
@@ -208,4 +193,5 @@ class App(AppBase):
         return await create_summary(
             transcription=transcription,
             username=username,
+            model=self.config.summary_model,
         )

@@ -2,7 +2,8 @@ from aiogram import F, Router, html
 from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
-from botspot import commands_menu, reply_safe
+from botspot import commands_menu, reply_safe, answer_safe, get_message_text
+from botspot.components.new.llm_provider import aquery_llm_text
 from botspot.user_interactions import ask_user_choice
 from botspot.utils import send_safe
 
@@ -78,3 +79,34 @@ async def main_chat_handler(message: Message, app: App, state: FSMContext):
 
     # todo: tell user how much this costed me.
     await notif.delete()
+
+
+@router.message()
+async def chat_handler(message: Message, app: App):
+    if message.reply_to_message:
+        await _reply_chat_handler(message, app)
+    else:
+        await _basic_chat_handler(message, app)
+
+
+async def _reply_chat_handler(message: Message, app: App):
+    """Use ai to allow user edit / chat about their transcript / summary"""
+    assert message.reply_to_message is not None
+
+    # todo: reconstruct full chat history from reply chain
+    prompt = get_message_text(message, include_reply=True)
+    response = await aquery_llm_text(prompt=prompt, model=app.config.summary_model)
+    await reply_safe(
+        message,
+        response,
+        # parse_mode="HTML",
+    )
+
+
+async def _basic_chat_handler(message: Message, app: App):
+    """Basic chat handler"""
+    await answer_safe(
+        message,
+        "This is a Whisper bot. "
+        "\n\nSend an Audio, Video, Voice or Video Note message to transcribe and summarize it.",
+    )

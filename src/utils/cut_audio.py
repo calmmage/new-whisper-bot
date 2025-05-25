@@ -7,11 +7,30 @@ import psutil
 from loguru import logger
 
 
+DEFAULT_CHUNK_DURATION: int = (60,)  # 1 minute for testing
+DEFAULT_OVERLAP_DURATION: int = (5,)  # 5 seconds overlap
+
+
+# todo: use this.
+def calculate_optimal_chunk_size(
+    audio_size,
+    target_chunk_count=20,
+    max_chunk_size=20 * 60,  # 20 min,
+    min_chunk_size=2 * 60,  # 2 min,
+):
+    target_chunk_size = int(audio_size / target_chunk_count)
+    if target_chunk_size < min_chunk_size:
+        return min_chunk_size
+    if target_chunk_size > max_chunk_size:
+        return max_chunk_size
+    return target_chunk_size
+
+
 async def cut_audio_into_pieces(
     audio_path: Path,
     output_dir: Optional[Path] = None,
-    chunk_duration: int = 600,  # 10 minutes in seconds
-    overlap_duration: int = 30,  # 30 seconds overlap
+    chunk_duration: int = DEFAULT_CHUNK_DURATION,
+    overlap_duration: int = DEFAULT_OVERLAP_DURATION,
     format: str = "mp3",
     use_memory_profiler: bool = False,
     rate_limit: int = 50,  # Maximum number of chunks to create
@@ -68,6 +87,13 @@ async def cut_audio_into_pieces(
     except Exception as e:
         logger.error(f"Error getting audio duration: {e}")
         raise
+
+    chunk_duration = calculate_optimal_chunk_size(
+        audio_size=duration,
+        target_chunk_count=20,
+        max_chunk_size=20 * 60 * 1000,  # 20 min,
+        min_chunk_size=2 * 60 * 1000,  # 2 min,
+    )
 
     # Calculate the number of chunks
     effective_chunk_duration = chunk_duration - overlap_duration
@@ -166,6 +192,7 @@ async def cut_audio_into_pieces_standard(
         )
 
         # Create each chunk with the specified overlap
+        # todo: paralellize this?
         for i, start_time in enumerate(start_times):
             # Calculate end time (with overlap)
             end_time = min(start_time + chunk_duration, duration)

@@ -1,15 +1,14 @@
 from typing import List, Optional
 
-from botspot.llm_provider import aquery_llm_text
 from loguru import logger
 
-from src.utils.text_utils import merge_all_chunks
+from src.utils.text_utils import merge_all_chunks, DEFAULT_BUFFER, DEFAULT_MATCH_CUTOFF
 
 
 async def merge_transcription_chunks(
     transcription_chunks: List[str],
-    buffer: int = 25,
-    match_cutoff: int = 15,
+    buffer: int = DEFAULT_BUFFER,
+    match_cutoff: int = DEFAULT_MATCH_CUTOFF,
     username: Optional[str] = None,
 ) -> str:
     """
@@ -46,43 +45,3 @@ async def merge_transcription_chunks(
     except Exception as e:
         logger.error(f"Error formatting text: {e}")
         return merged_text
-
-
-async def format_text_with_llm(
-    text: str, username: Optional[str] = None, model: str = "gpt-4-1106-preview"
-) -> str:
-    """
-    Format text with LLM to improve readability.
-
-    Args:
-        text: Text to format
-        username: Username for quota tracking
-        model: LLM model to use
-
-    Returns:
-        Formatted text
-    """
-    system_prompt = """
-    You're text formatting assistant. Your goal is:
-    - Add rich punctuation - new lines, quotes, dots and commas where appropriate
-    - Break the text into paragraphs using double new lines
-    - Keep the original text word-to-word, with only minor changes where absolutely necessary
-    - Fix grammar and typos only when they significantly impact readability
-    """
-
-    prompt = f"""
-    Please format the following transcription text to improve readability:
-
-    {text}
-    """
-
-    formatted_text = await aquery_llm_text(
-        prompt=prompt,
-        system_prompt=system_prompt,
-        model=model,
-        user=username,
-        temperature=0.3,
-        max_tokens=4096,
-    )
-
-    return formatted_text

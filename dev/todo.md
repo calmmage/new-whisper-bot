@@ -6,12 +6,28 @@
 - [x] cleanup mp3 file
 - [x] cleanup chunks after parsing
 - [ ] use "count ... " - which ... calculates how many chunks to cut thing into
+  - [ ] process all chunks in parallel, not one by one
 - [x] set timeout on ask_user - just like 10 seconds
 - [x] fix 'summary' command - model or stuff.
+
+- [ ] debug and fix merge chunks - what did break? Add tests? 
+
+- [ ] rework audio cutting logic - it is very convoluted now... 
+  - if small -> use old cutting (not implemented yet) 
+  - if large - cut into chunks. Avoid too many chunks to speed-up stuff.. 
+
 - [ ] better formatting? html, md or something.. 
   - Send as pdf or as Notion doc? 
 - [ ] track usage - incoming requests and generated transcriptions
-- [ ] report to a user monetary cost 
+- [ ] report to a user monetary cost of what he just parsed
+- [ ] add a command to show total usage stats for current user or for admin. 
+- [ ] add a basic chat handler explaining to a user how to use the bot
+  - [ ] add a gpt chat handler to chat with gpt use transcript as ... reply message 
+  - [ ] add warmup messages to all llm_provider handlers
+- [ ] add a better estimate for how long it will take to process the audio
+  - [ ] report stages of processing  to a user
+
+- [ ] for small files (below ? 20 minutes?) use old in-memory pydub cut audio.. 
 
 
 ## Plan
