@@ -18,7 +18,7 @@ from loguru import logger
 # Add the src directory to the Python path
 sys.path.append(str(Path(__file__).parent.parent))
 
-from src.utils.parse_audio_chunks import parse_audio_chunk, parse_audio_chunks
+from src.core.parse_audio_chunks import parse_audio_chunk, parse_audio_chunks
 
 
 async def check_parse_audio_chunk(

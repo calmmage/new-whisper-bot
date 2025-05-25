@@ -5,12 +5,12 @@ from typing import List, Optional
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings
 
-from src.utils.convert_to_mp3 import convert_to_mp3
-from src.utils.create_summary import create_summary
-from src.utils.cut_audio import cut_audio_into_pieces
-from src.utils.download_media import download_file_via_subprocess
-from src.utils.merge_transcription_chunks import merge_transcription_chunks
-from src.utils.parse_audio_chunks import parse_audio_chunks
+from src.core.convert_to_mp3 import convert_to_mp3
+from src.core.create_summary import create_summary
+from src.core.cut_audio import cut_audio_into_pieces
+from src.core.download_media import download_file_via_subprocess
+from src.core.merge_transcription_chunks import merge_transcription_chunks
+from src.core.parse_audio_chunks import parse_audio_chunks
 
 
 class AppConfig(BaseSettings):

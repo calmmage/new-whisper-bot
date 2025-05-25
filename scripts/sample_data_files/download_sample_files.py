@@ -12,7 +12,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 # Import from src directory (run script from project root)
-from src.utils.download_media import download_file_via_subprocess
+from src.core.download_media import download_file_via_subprocess
 
 
 async def download_sample_files():

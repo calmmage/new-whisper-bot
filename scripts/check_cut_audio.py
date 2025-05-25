@@ -19,7 +19,7 @@ from loguru import logger
 # Add the src directory to the Python path
 sys.path.append(str(Path(__file__).parent.parent))
 
-from src.utils.cut_audio import cut_audio_into_pieces
+from src.core.cut_audio import cut_audio_into_pieces
 
 
 def get_audio_duration(audio_path: Path) -> float:

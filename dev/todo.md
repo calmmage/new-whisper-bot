@@ -29,6 +29,22 @@
 
 - [ ] for small files (below ? 20 minutes?) use old in-memory pydub cut audio.. 
 
+Bugfix
+- [ ] Merge chunks - seems broken now
+
+Finish
+- [ ] apply basic formatting to text chunks.
+
+Rework
+- [ ] rework audio cutting: use ffmpeg to cut in-place first into big chunks, then pydub to cut in-memory
+
+
+
+
+
+
+
+
 
 ## Plan
 
@@ -66,6 +82,20 @@ Old features / code that I will need
   - [x] use tested system prompt
   - [ ] add an option for user to do additional freeform text requests in chat (1 follow-up?)
 
+## Done
+
+
+
+
+
+
+
+
+
+
+
+# Old todos
+
 ## Human checks
 - [x] download
 - [x] convert to mp3
@@ -75,15 +105,17 @@ Old features / code that I will need
 - [ ] summarize
 
 For future, NOT NOW
-  - [ ] just 'reply to' activates gpt chat mode with that message text as context
+  - [x] just 'reply to' activates gpt chat mode with that message text as context
   - [ ] add customized vocabulary / terms and send them to whisper api  
     - [ ] "есть ли какие-то уникальные словечки которые тебе важно чтобы whisper распознал правильно"?
 
 
-- [ ] add 3 models - 'whisper-1', 'gpt-4o-mini-transcribe', 'gpt-4o-transcribe'
+- [x] add 3 models - 'whisper-1', 'gpt-4o-mini-transcribe', 'gpt-4o-transcribe'
   - [ ] compare prices (using check-script? transcribe a small audio first to see model response format and if it has prices / tokens)
-  - [ ] allow user to pick which model to use for transcription (use ask_user_choice), default - whisper-1
-- [ ] cleanup - delete all final and intermediary media files
-  - [ ] original video / audio file
-  - [ ] chunks
-  - [ ] converted to mp3
+  - [x] allow user to pick which model to use for transcription (use ask_user_choice), default - whisper-1
+- [x] cleanup - delete all final and intermediary media files
+  - [x] original video / audio file
+  - [x] chunks
+  - [x] converted to mp3
+
+# Done
