@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "new-whisper-bot"
-version = "0.1.0"
+version = "0.1.1"
 description = ""
 authors = ["Petr Lavrov <calmmage@gmail.com>"]
 readme = "README.md"
@@ -32,6 +32,8 @@ langchain-anthropic = "*"
 tgcrypto = "^1.2.5"
 pyrogram = "^2.0.106"
 psutil = "^7.0.0"
+telethon = "^1.40.0"
+litellm = "^1.71.0"
 
 [tool.poetry.group.extras.dependencies]
 # dependencies for extra features

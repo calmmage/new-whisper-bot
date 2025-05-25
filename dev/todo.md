@@ -1,5 +1,19 @@
 # Todos
 
+## 25 May 2025
+
+- [x] cleanup original file - if not mp3
+- [x] cleanup mp3 file
+- [x] cleanup chunks after parsing
+- [ ] use "count ... " - which ... calculates how many chunks to cut thing into
+- [x] set timeout on ask_user - just like 10 seconds
+- [x] fix 'summary' command - model or stuff.
+- [ ] better formatting? html, md or something.. 
+  - Send as pdf or as Notion doc? 
+- [ ] track usage - incoming requests and generated transcriptions
+- [ ] report to a user monetary cost 
+
+
 ## Plan
 
 - a - Download audio

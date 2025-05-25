@@ -55,6 +55,9 @@ async def main_chat_handler(message: Message, app: App, state: FSMContext):
             "gpt-4o-transcribe": "GPT-4o (Best, Slowest, most expensive)",
         },
         state=state,
+        timeout=10,  # 10 seconds to choose, then default to whisper-1
+        cleanup=True,
+        default_choice="whisper-1",
     )
 
     # Send a processing message

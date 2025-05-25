@@ -20,6 +20,9 @@ class AppConfig(BaseSettings):
     telegram_api_id: int
     telegram_api_hash: SecretStr
 
+    downloads_dir: Path = Path("downloads").absolute()
+    cleanup_downloads: bool = True
+
     openai_api_key: Optional[SecretStr] = None
     use_memory_profiler: bool = False
 
@@ -130,32 +133,40 @@ class App(AppBase):
     async def download_media(self, message_id: int, username: str) -> Path:
         """Download media from message using aiogram"""
         # Use subprocess to avoid aiogram/pyrogram conflicts
-        # return await download_file_from_aiogram_message(
-        #     message_id=message_id, username=username, use_subprocess=True
-        # )
         return await download_file_via_subprocess(
             message_id=message_id,
             username=username,
             bot_token=self.config.telegram_bot_token.get_secret_value(),
             api_id=self.config.telegram_api_id,
             api_hash=self.config.telegram_api_hash.get_secret_value(),
+            target_dir=self.config.downloads_dir,
         )
 
     async def convert_video_to_audio(self, media_path: Path) -> Path:
         """Convert video to audio if necessary using ffmpeg"""
-        return await convert_to_mp3(
+        path = await convert_to_mp3(
             source_path=media_path, use_memory_profiler=self.config.use_memory_profiler
         )
+        # cleanup - delete original file if conversion was successful
+        if self.config.cleanup_downloads and not media_path.name.endswith(".mp3"):
+            media_path.unlink()
+        return path
 
     async def cut_audio_into_pieces(self, audio_path: Path) -> List[Path]:
         """Cut audio into smaller pieces using ffmpeg"""
-        return await cut_audio_into_pieces(
+        chunks = await cut_audio_into_pieces(
             audio_path=audio_path,
             chunk_duration=self.config.whisper_chunk_duration,
             overlap_duration=self.config.whisper_overlap_duration,
             rate_limit=self.config.whisper_rate_limit,
             use_memory_profiler=self.config.use_memory_profiler,
         )
+
+        # cleanup - delete original file if cutting was successful
+        if self.config.cleanup_downloads:
+            audio_path.unlink()
+
+        return chunks
 
     async def parse_audio_chunks(
         self, audio_pieces: List[Path], model="whisper-1"
@@ -165,12 +176,19 @@ class App(AppBase):
         if self.config.openai_api_key:
             api_key = self.config.openai_api_key.get_secret_value()
 
-        return await parse_audio_chunks(
+        transcribed_chunks = await parse_audio_chunks(
             audio_chunks=audio_pieces,
             model_name=model,
             api_key=api_key,
             max_concurrent=self.config.whisper_max_concurrent,
         )
+
+        # cleanup - delete audio pieces if parsing was successful
+        if self.config.cleanup_downloads:
+            for chunk in audio_pieces:
+                chunk.unlink()
+
+        return transcribed_chunks
 
     async def merge_transcription_chunks(
         self, transcription_pieces: List[str], username: Optional[str] = None
@@ -189,7 +207,5 @@ class App(AppBase):
         """Create summary of transcription using botspot's llm_provider"""
         return await create_summary(
             transcription=transcription,
-            max_length=1000,
             username=username,
-            model="gpt-4-1106-preview",  # Use GPT-4 Turbo for better summaries
         )
