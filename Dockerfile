@@ -5,7 +5,7 @@ WORKDIR /app
 # Update and install FFmpeg
 RUN apt-get update && \
     apt-get install -y --no-install-recommends curl ffmpeg gcc build-essential && \
-    rm -rf /var/lib/apt/lists/* \
+    rm -rf /var/lib/apt/lists/*
 
 # Install poetry
 RUN pip install --no-cache-dir poetry
