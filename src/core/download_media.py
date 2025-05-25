@@ -94,6 +94,10 @@ async def download_file_from_aiogram_message(
     file_name: Optional[str] = None,
     use_original_file_name: bool = True,
     use_subprocess: bool = False,
+    api_id: Optional[int] = None,
+    api_hash: Optional[str] = None,
+    bot_token: Optional[str] = None,
+    in_memory: bool = False,
 ):
     """
     Download file from aiogram message.
@@ -111,9 +115,32 @@ async def download_file_from_aiogram_message(
     assert message.from_user is not None
     username = message.from_user.username
 
+    if api_id is None:
+        from botspot import get_dependency_manager
+        deps = get_dependency_manager()
+        api_id = deps.botspot_settings.telethon_manager.api_id
+    if api_hash is None:
+        from botspot import get_dependency_manager
+        deps = get_dependency_manager()
+        assert deps.botspot_settings.telethon_manager.api_hash is not None
+        api_hash = deps.botspot_settings.telethon_manager.api_hash.get_secret_value()
+    if bot_token is None:
+        bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
+
+    assert api_id is not None
+    assert api_hash is not None
+    assert bot_token is not None
+
     if use_subprocess:
         return await download_file_via_subprocess(
-            message_id, username, target_dir, file_name, use_original_file_name
+            message_id, username,
+            api_id=api_id,
+            api_hash=api_hash,
+            bot_token=bot_token,
+            target_dir=target_dir,
+            file_name=file_name,
+            use_original_file_name=use_original_file_name,
+            in_memory=in_memory,
         )
     else:
         return await download_file_with_pyrogram(
@@ -155,6 +182,7 @@ async def download_file_with_pyrogram(
     api_hash: Optional[str] = None,
     bot_token: Optional[str] = None,
     check_aiogram: bool = True,
+    in_memory: bool = False,
 ):
     # Check for aiogram conflicts
     if check_aiogram and _check_aiogram_running():
@@ -182,7 +210,7 @@ async def download_file_with_pyrogram(
         )
 
     file_path = target_dir / file_name
-    await pyrogram_message.download(file_name=str(file_path))
+    await pyrogram_message.download(file_name=str(file_path), in_memory=in_memory)
 
     return file_path
 
@@ -196,6 +224,7 @@ async def download_file_via_subprocess(
     target_dir: Optional[Path] = None,
     file_name: Optional[str] = None,
     use_original_file_name: bool = True,
+    in_memory: bool = False
 ):
     """
     Download file using subprocess to avoid pyrogram/aiogram conflicts.
@@ -222,6 +251,12 @@ async def download_file_via_subprocess(
         "--bot_token",
         bot_token,
     ]
+    if in_memory:
+        cmd.append("--in_memory")
+        if target_dir is not None:
+            logger.warning(
+                f"Passing target dir with in_memory=True does nothing. {target_dir=}"
+            )
 
     if target_dir is not None:
         cmd.extend(["--target_dir", str(target_dir)])
@@ -280,6 +315,7 @@ if __name__ == "__main__":
     parser.add_argument("--api_id", type=int, required=True)
     parser.add_argument("--api_hash", type=str, required=True)
     parser.add_argument("--bot_token", type=str, required=True)
+    parser.add_argument("--in_memory", action='store_true')
 
     args = parser.parse_args()
 
@@ -294,6 +330,7 @@ if __name__ == "__main__":
             api_hash=args.api_hash,
             bot_token=args.bot_token,
             check_aiogram=False,  # Disable aiogram check in subprocess
+            in_memory=args.in_memory,
         )
     )
 
