@@ -13,7 +13,7 @@ async def cut_audio_ffmpeg(audio_file: Path, num_parts: Optional[int] = None, pa
     target_dir.mkdir(exist_ok=True)
     
     if num_parts:
-        # Get audio duration first to calculate part duration
+        # Get audio duration to calculate segment time
         duration_cmd = [
             "ffprobe", "-v", "quiet", "-show_entries", "format=duration",
             "-of", "csv=p=0", str(audio_file)
@@ -27,18 +27,18 @@ async def cut_audio_ffmpeg(audio_file: Path, num_parts: Optional[int] = None, pa
             raise RuntimeError(f"Failed to get audio duration: {stderr.decode()}")
         
         total_duration = float(stdout.decode().strip())
-        # todo: add a small buffer to make sure we don't have a tiny part at the end.
-        part_duration = total_duration / num_parts
+        segment_time = total_duration / num_parts
+    else:
+        segment_time = part_duration
     
-    # Use ffmpeg segment muxer to cut in one go
+    # Use ffmpeg segment to cut in one command
     output_pattern = target_dir / f"{audio_file.stem}_part_%03d{audio_file.suffix}"
     
     segment_cmd = [
         "ffmpeg", "-i", str(audio_file),
         "-f", "segment",
-        "-segment_time", str(part_duration),
+        "-segment_time", str(segment_time),
         "-c", "copy",
-        "-reset_timestamps", "1",
         "-y",  # overwrite output files
         str(output_pattern)
     ]
