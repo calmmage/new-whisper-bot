@@ -9,7 +9,11 @@ https://grok.com/share/bGVnYWN5_832ecdcb-8083-4ef7-bfbf-9ab8411d8697
 - [ ] make sure the bot works for anonymous users - and I have control over how much. Did I already implemnt this?
 
 - [ ] add explicitly models for transcript, chat, format and summary in app and User config
-  - [ ] implement better user settings component - handler etc.1
+  - [ ] implement better user settings component - handler etc.
+
+- [ ] report user on our progress - update status message along the way
+  - [ ] make a nice timing report in the end (total time to transcribe, details?)
+  - Nah, need a way to view it but not in their face
 
 ## 25 May 2025
 
