@@ -336,7 +336,7 @@ if __name__ == "__main__":
             api_hash=args.api_hash,
             bot_token=args.bot_token,
             check_aiogram=False,  # Disable aiogram check in subprocess
-            in_memory=False
+            in_memory=False,
         )
     )
     assert isinstance(downloaded_file_path, Path)

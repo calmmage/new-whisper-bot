@@ -94,10 +94,9 @@ async def main_chat_handler(message: Message, app: App, state: FSMContext):
     total_cost = cost_info["total_cost"]
     operation_costs = cost_info["operation_costs"]
 
-    cost_breakdown = "\n".join([
-        f"  - {op.capitalize()}: ${cost:.4f}" 
-        for op, cost in operation_costs.items()
-    ])
+    cost_breakdown = "\n".join(
+        [f"  - {op.capitalize()}: ${cost:.4f}" for op, cost in operation_costs.items()]
+    )
 
     cost_message = (
         f"💰 <b>Processing Cost:</b>\n"
@@ -136,9 +135,7 @@ async def _reply_chat_handler(message: Message, app: App):
     app._current_message_id = message.message_id
 
     # Process chat request
-    response = await app.chat_about_transcript(
-        full_prompt=prompt, username=username
-    )
+    response = await app.chat_about_transcript(full_prompt=prompt, username=username)
 
     # Clear message_id context variable
     app._current_message_id = None

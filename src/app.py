@@ -102,9 +102,9 @@ class App:
             self._db = get_database()
         return self._db
 
-
-
-    async def log_event(self, event_type: str, user_id: str, data: Dict[str, Any] = None) -> None:
+    async def log_event(
+        self, event_type: str, user_id: str, data: Dict[str, Any] = None
+    ) -> None:
         """
         Log an event to MongoDB.
 
@@ -120,14 +120,21 @@ class App:
             "event_type": event_type,
             "user_id": user_id,
             "timestamp": datetime.datetime.utcnow(),
-            **data
+            **data,
         }
 
         logger.info(f"Logging event: {event_type} for user {user_id}")
         await self.db.events.insert_one(event)
 
-    async def log_cost(self, operation: str, user_id: str, model: str, cost: float = None, 
-                      usage: Dict[str, Any] = None, message_id: int = None) -> None:
+    async def log_cost(
+        self,
+        operation: str,
+        user_id: str,
+        model: str,
+        cost: float = None,
+        usage: Dict[str, Any] = None,
+        message_id: int = None,
+    ) -> None:
         """
         Log cost information to MongoDB.
 
@@ -147,7 +154,7 @@ class App:
             "user_id": user_id,
             "model": model,
             "timestamp": datetime.datetime.utcnow(),
-            "usage": usage
+            "usage": usage,
         }
 
         if cost is not None:
@@ -159,7 +166,9 @@ class App:
         logger.info(f"Logging cost for {operation} using {model} for user {user_id}")
         await self.db.costs.insert_one(cost_data)
 
-    async def get_total_cost(self, user_id: str, message_id: int = None) -> Dict[str, Any]:
+    async def get_total_cost(
+        self, user_id: str, message_id: int = None
+    ) -> Dict[str, Any]:
         """
         Get the total cost for a specific user and optionally for a specific message.
 
@@ -202,11 +211,13 @@ class App:
             "operation_costs": operation_costs,
             "model_costs": model_costs,
             "currency": "USD",
-            "cost_count": len(costs)
+            "cost_count": len(costs),
         }
 
     # Main method
-    async def process_message(self, message: AiogramMessage, whisper_model: Optional[str] = None) -> str:
+    async def process_message(
+        self, message: AiogramMessage, whisper_model: Optional[str] = None
+    ) -> str:
         """
         [x] process_message
         ├── [x] download_attachment
@@ -238,7 +249,7 @@ class App:
         file_info = {
             "message_id": message_id,
             "chat_id": message.chat.id,
-            "file_type": self._get_file_type(message)
+            "file_type": self._get_file_type(message),
         }
         logger.info(f"User {username} submitted a file for processing: {file_info}")
         await self.log_event("file_submission", username, file_info)
@@ -250,7 +261,9 @@ class App:
         # Store message_id in a context variable to pass to nested methods
         self._current_message_id = message_id
 
-        chunks = await self.process_parts(parts, username=username, whisper_model=whisper_model)
+        chunks = await self.process_parts(
+            parts, username=username, whisper_model=whisper_model
+        )
 
         chunks = await self.format_chunks_with_llm(chunks, username=username)
 
@@ -262,9 +275,11 @@ class App:
             "message_id": message_id,
             "processing_time_seconds": processing_time,
             "result_length": len(result),
-            "chunks_count": len(chunks)
+            "chunks_count": len(chunks),
         }
-        logger.info(f"Completed processing file for user {username} in {processing_time:.2f} seconds")
+        logger.info(
+            f"Completed processing file for user {username} in {processing_time:.2f} seconds"
+        )
         await self.log_event("file_processing_complete", username, completion_info)
 
         # Clear the context variable
@@ -349,7 +364,12 @@ class App:
     # endregion prepare_parts
 
     # region process_parts
-    async def process_parts(self, parts: Sequence[Audio], username: Optional[str] = None, whisper_model:Optional[str]=None) -> List[str]:
+    async def process_parts(
+        self,
+        parts: Sequence[Audio],
+        username: Optional[str] = None,
+        whisper_model: Optional[str] = None,
+    ) -> List[str]:
         """
         Process multiple audio parts.
 
@@ -366,15 +386,19 @@ class App:
 
         # this has to be done one by one, do NOT parallelize.
         for i, part in enumerate(parts):
-            logger.info(f"Processing part {i+1}/{len(parts)}")
+            logger.info(f"Processing part {i + 1}/{len(parts)}")
             # todo: make sure memory is freed after each part.
-            chunks += await self.process_part(part, username=username, whisper_model=whisper_model)
+            chunks += await self.process_part(
+                part, username=username, whisper_model=whisper_model
+            )
             if isinstance(part, Path):
                 if self.config.cleanup_downloads:
                     part.unlink(missing_ok=True)
 
         processing_time = time.time() - start_time
-        logger.info(f"Processed {len(parts)} parts in {processing_time:.2f}s, got {len(chunks)} chunks")
+        logger.info(
+            f"Processed {len(parts)} parts in {processing_time:.2f}s, got {len(chunks)} chunks"
+        )
         return chunks
 
     @staticmethod
@@ -394,8 +418,8 @@ class App:
     async def process_part(
         self,
         audio: Audio,
-        username: Optional[str] = None
-            , whisper_model:Optional[str]=None
+        username: Optional[str] = None,
+        whisper_model: Optional[str] = None,
     ) -> List[str]:
         """
         Process an audio part by splitting it into chunks and transcribing them.
@@ -413,7 +437,9 @@ class App:
         assert isinstance(audio, AudioSegment)
 
         audio_duration = len(audio)
-        logger.info(f"Processing audio part with duration: {audio_duration/1000:.2f} seconds")
+        logger.info(
+            f"Processing audio part with duration: {audio_duration / 1000:.2f} seconds"
+        )
 
         period = self._determine_optimal_period(
             audio_duration,
@@ -426,12 +452,14 @@ class App:
             audio, period=period, buffer=self.config.overlap_duration
         )
 
-        logger.info(f"Split audio into {len(audio_chunks)} chunks with period {period/1000:.2f} seconds")
+        logger.info(
+            f"Split audio into {len(audio_chunks)} chunks with period {period / 1000:.2f} seconds"
+        )
 
         transcriptions = await self.parse_audio_chunks(
             audio_chunks,
             username=username,
-            model_name=whisper_model or self.config.transcription_model
+            model_name=whisper_model or self.config.transcription_model,
         )
 
         return transcriptions
@@ -467,7 +495,9 @@ class App:
         if model_name is None:
             model_name = self.config.transcription_model
 
-        logger.info(f"Transcribing {audio_file.name} using OpenAI Whisper API model {model_name}")
+        logger.info(
+            f"Transcribing {audio_file.name} using OpenAI Whisper API model {model_name}"
+        )
         start_time = time.time()
 
         async with self.whisper_semaphore:
@@ -509,7 +539,7 @@ class App:
                     "file_size_mb": file_size_mb,
                     "processing_time": processing_time,
                     "characters": len(transcription),
-                    "estimated_minutes": file_size_mb
+                    "estimated_minutes": file_size_mb,
                 }
 
                 await self.log_cost(
@@ -518,7 +548,7 @@ class App:
                     model=model_name,
                     cost=estimated_cost,
                     usage=usage_info,
-                    message_id=getattr(self, "_current_message_id", None)
+                    message_id=getattr(self, "_current_message_id", None),
                 )
 
             return transcription
@@ -544,16 +574,15 @@ class App:
         Returns:
             List of transcription texts
         """
-        logger.info(f"Transcribing {len(audio_chunks)} audio chunks using model {model_name}")
+        logger.info(
+            f"Transcribing {len(audio_chunks)} audio chunks using model {model_name}"
+        )
         start_time = time.time()
 
         # Create tasks for all chunks
         tasks = [
             self.parse_audio_chunk(
-                chunk, 
-                model_name=model_name, 
-                language=language,
-                username=username
+                chunk, model_name=model_name, language=language, username=username
             )
             for chunk in audio_chunks
         ]
@@ -628,9 +657,7 @@ class App:
             await asyncio.sleep(0.1)
 
             formatted_text = await format_text_with_llm(
-                text=chunk, 
-                model=self.config.formatting_model, 
-                username=username
+                text=chunk, model=self.config.formatting_model, username=username
             )
 
             processing_time = time.time() - start_time
@@ -649,10 +676,14 @@ class App:
             model = self.config.formatting_model
             if "gpt-4" in model:
                 # GPT-4 pricing: $0.01 per 1K input tokens, $0.03 per 1K output tokens
-                estimated_cost = (input_tokens * 0.01 / 1000) + (output_tokens * 0.03 / 1000)
+                estimated_cost = (input_tokens * 0.01 / 1000) + (
+                    output_tokens * 0.03 / 1000
+                )
             else:
                 # Default to GPT-3.5 pricing: $0.0015 per 1K input tokens, $0.002 per 1K output tokens
-                estimated_cost = (input_tokens * 0.0015 / 1000) + (output_tokens * 0.002 / 1000)
+                estimated_cost = (input_tokens * 0.0015 / 1000) + (
+                    output_tokens * 0.002 / 1000
+                )
 
             # Log cost information
             usage_info = {
@@ -660,7 +691,7 @@ class App:
                 "output_length": len(formatted_text),
                 "estimated_input_tokens": input_tokens,
                 "estimated_output_tokens": output_tokens,
-                "processing_time": processing_time
+                "processing_time": processing_time,
             }
 
             await self.log_cost(
@@ -669,7 +700,7 @@ class App:
                 model=self.config.formatting_model,
                 cost=estimated_cost,
                 usage=usage_info,
-                message_id=getattr(self, "_current_message_id", None)
+                message_id=getattr(self, "_current_message_id", None),
             )
 
             return formatted_text
@@ -717,13 +748,19 @@ class App:
             model = self.config.summary_model
             if "claude-4" in model:
                 # Claude-4 pricing: $0.015 per 1K input tokens, $0.075 per 1K output tokens
-                estimated_cost = (input_tokens * 0.015 / 1000) + (output_tokens * 0.075 / 1000)
+                estimated_cost = (input_tokens * 0.015 / 1000) + (
+                    output_tokens * 0.075 / 1000
+                )
             elif "claude-3" in model:
                 # Claude-3 pricing: $0.008 per 1K input tokens, $0.024 per 1K output tokens
-                estimated_cost = (input_tokens * 0.008 / 1000) + (output_tokens * 0.024 / 1000)
+                estimated_cost = (input_tokens * 0.008 / 1000) + (
+                    output_tokens * 0.024 / 1000
+                )
             else:
                 # Default to GPT-4 pricing: $0.01 per 1K input tokens, $0.03 per 1K output tokens
-                estimated_cost = (input_tokens * 0.01 / 1000) + (output_tokens * 0.03 / 1000)
+                estimated_cost = (input_tokens * 0.01 / 1000) + (
+                    output_tokens * 0.03 / 1000
+                )
 
             # Log cost information
             usage_info = {
@@ -731,15 +768,19 @@ class App:
                 "output_length": len(summary),
                 "estimated_input_tokens": input_tokens,
                 "estimated_output_tokens": output_tokens,
-                "processing_time": processing_time
+                "processing_time": processing_time,
             }
 
             # Log event for summary creation
-            await self.log_event("summary_creation", username, {
-                "input_length": len(transcript),
-                "output_length": len(summary),
-                "processing_time": processing_time
-            })
+            await self.log_event(
+                "summary_creation",
+                username,
+                {
+                    "input_length": len(transcript),
+                    "output_length": len(summary),
+                    "processing_time": processing_time,
+                },
+            )
 
             await self.log_cost(
                 operation="summary",
@@ -747,14 +788,12 @@ class App:
                 model=self.config.summary_model,
                 cost=estimated_cost,
                 usage=usage_info,
-                message_id=getattr(self, "_current_message_id", None)
+                message_id=getattr(self, "_current_message_id", None),
             )
 
             return summary
 
-    async def chat_about_transcript(
-        self, full_prompt: str, username: str
-    ) -> str:
+    async def chat_about_transcript(self, full_prompt: str, username: str) -> str:
         """
         Chat about the transcript using the configured chat model.
 
@@ -769,9 +808,9 @@ class App:
         start_time = time.time()
 
         # Log chat event
-        await self.log_event("chat_request", username, {
-            "prompt_length": len(full_prompt)
-        })
+        await self.log_event(
+            "chat_request", username, {"prompt_length": len(full_prompt)}
+        )
 
         async with self.chat_semaphore:
             # Small delay to be nice to the API
@@ -800,13 +839,19 @@ class App:
             model = self.config.chat_model
             if "claude-4" in model:
                 # Claude-4 pricing: $0.015 per 1K input tokens, $0.075 per 1K output tokens
-                estimated_cost = (input_tokens * 0.015 / 1000) + (output_tokens * 0.075 / 1000)
+                estimated_cost = (input_tokens * 0.015 / 1000) + (
+                    output_tokens * 0.075 / 1000
+                )
             elif "claude-3" in model:
                 # Claude-3 pricing: $0.008 per 1K input tokens, $0.024 per 1K output tokens
-                estimated_cost = (input_tokens * 0.008 / 1000) + (output_tokens * 0.024 / 1000)
+                estimated_cost = (input_tokens * 0.008 / 1000) + (
+                    output_tokens * 0.024 / 1000
+                )
             else:
                 # Default to GPT-4 pricing: $0.01 per 1K input tokens, $0.03 per 1K output tokens
-                estimated_cost = (input_tokens * 0.01 / 1000) + (output_tokens * 0.03 / 1000)
+                estimated_cost = (input_tokens * 0.01 / 1000) + (
+                    output_tokens * 0.03 / 1000
+                )
 
             # Log cost information
             usage_info = {
@@ -814,15 +859,19 @@ class App:
                 "output_length": len(response),
                 "estimated_input_tokens": input_tokens,
                 "estimated_output_tokens": output_tokens,
-                "processing_time": processing_time
+                "processing_time": processing_time,
             }
 
             # Log completion event
-            await self.log_event("chat_completion", username, {
-                "input_length": len(full_prompt),
-                "output_length": len(response),
-                "processing_time": processing_time
-            })
+            await self.log_event(
+                "chat_completion",
+                username,
+                {
+                    "input_length": len(full_prompt),
+                    "output_length": len(response),
+                    "processing_time": processing_time,
+                },
+            )
 
             await self.log_cost(
                 operation="chat",
@@ -830,7 +879,7 @@ class App:
                 model=self.config.chat_model,
                 cost=estimated_cost,
                 usage=usage_info,
-                message_id=getattr(self, "_current_message_id", None)
+                message_id=getattr(self, "_current_message_id", None),
             )
 
             return response
