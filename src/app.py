@@ -17,7 +17,7 @@ from tenacity import (
 )
 
 from botspot.core.errors import BotspotError
-from src.create_summary import create_summary
+from src.utils.create_summary import create_summary
 from src.utils.audio_utils import split_audio, Audio
 from src.utils.convert_to_mp3_ffmpeg import convert_to_mp3_ffmpeg
 from src.utils.cut_audio_ffmpeg import cut_audio_ffmpeg
@@ -31,7 +31,9 @@ class AppConfig(BaseSettings):
     telegram_api_hash: SecretStr
     telegram_bot_token: SecretStr
 
-    downloads_dir: Path = Path("downloads")
+    downloads_dir: Path = Path("downloads").absolute()
+    # todo: make sure that if there's only a single file - we reuse it and not delete it
+    cleanup_downloads: bool = True
     use_original_file_name: bool = False
 
     # cutting parameters
@@ -41,7 +43,7 @@ class AppConfig(BaseSettings):
     maximum_chunk_duration: int = 20 * 60 * 1000  # 20 minutes
     overlap_duration: int = 5 * 1000  # # 5 seconds
 
-    # todo: decide global semaphore or per task type?
+    # todo: check if we need a global semaphore instead
     # openai_max_concurrent_connections: int = 50
     whisper_max_concurrent: int = 50
     summary_max_concurrent: int = 10
@@ -60,7 +62,6 @@ class AppConfig(BaseSettings):
     chat_model: str = (
         "claude-4-sonnet"  # Default chat model for discussing transcripts and summaries
     )
-    # todo: use
     # todo: allow user to configure
     formatting_model: str = "gpt-4.1-nano"
 
@@ -78,9 +79,7 @@ class App:
         # self.semaphore = asyncio.Semaphore(
         #     self.config.openai_max_concurrent_connections
         # )
-        # todo: use
         self.whisper_semaphore = asyncio.Semaphore(self.config.whisper_max_concurrent)
-        # todo: use
         self.summary_semaphore = asyncio.Semaphore(self.config.summary_max_concurrent)
         self.format_semaphore = asyncio.Semaphore(self.config.format_max_concurrent)
         # todo: use
@@ -90,6 +89,7 @@ class App:
             api_key=self.config.openai_api_key.get_secret_value()
         )
 
+    # Main method
     async def process_message(self, message: AiogramMessage):
         """
         [x] process_message
@@ -127,10 +127,6 @@ class App:
 
         return result
 
-        # audio_file_size = calculate_audio_size(in_memory_audio)
-        # AUDIO_SIZE_THRESHOLD = 100 * 1024 * 1024  # 50 MB
-        # offload files over 50 megabytes to disk
-
     async def download_attachment(
         self, message: AiogramMessage
     ) -> Union[BinaryIO, Path]:
@@ -149,7 +145,11 @@ class App:
     async def prepare_parts(self, media_file: Union[BinaryIO, Path]) -> Sequence[Audio]:
         if isinstance(media_file, Path):
             # process file on disk - with
-            return await self.process_file_on_disk(media_file)
+            parts = await self.process_file_on_disk(media_file)
+            if self.config.cleanup_downloads:
+                if media_file != parts[0]:
+                    media_file.unlink()
+            return parts
         else:
             # process file in memory - with pydub
             assert isinstance(media_file, (BinaryIO, BytesIO))
@@ -195,6 +195,9 @@ class App:
         for part in parts:
             # todo: make sure memory is freed after each part.
             chunks += await self.process_part(part)
+            if isinstance(part, Path):
+                if self.config.cleanup_downloads:
+                    part.unlink()
 
         return chunks
 
