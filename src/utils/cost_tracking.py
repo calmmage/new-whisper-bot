@@ -1,0 +1,188 @@
+from typing import Dict, Any, Optional
+from dataclasses import dataclass
+
+
+@dataclass
+class ModelPricing:
+    """Pricing information for a model."""
+    input_price_per_1k: float  # Price per 1K input tokens
+    output_price_per_1k: float  # Price per 1K output tokens
+    currency: str = "USD"
+
+
+# Model pricing database
+MODEL_PRICING: Dict[str, ModelPricing] = {
+    # OpenAI GPT models
+    "gpt-4.1-nano": ModelPricing(input_price_per_1k=0.0001, output_price_per_1k=0.0004),
+    "gpt-4": ModelPricing(input_price_per_1k=0.01, output_price_per_1k=0.03),
+    "gpt-4-turbo": ModelPricing(input_price_per_1k=0.01, output_price_per_1k=0.03),
+    "gpt-3.5-turbo": ModelPricing(input_price_per_1k=0.0015, output_price_per_1k=0.002),
+    
+    # Claude models
+    "claude-4-sonnet": ModelPricing(input_price_per_1k=0.015, output_price_per_1k=0.075),
+    "claude-3-sonnet": ModelPricing(input_price_per_1k=0.008, output_price_per_1k=0.024),
+    "claude-3-haiku": ModelPricing(input_price_per_1k=0.00025, output_price_per_1k=0.00125),
+    
+    # Whisper models (pricing per minute, not tokens)
+    "whisper-1": ModelPricing(input_price_per_1k=0.006, output_price_per_1k=0.0),  # $0.006 per minute
+}
+
+
+def get_model_pricing_info(model: str) -> ModelPricing:
+    """
+    Get pricing information for a model.
+    
+    Args:
+        model: Model name
+        
+    Returns:
+        ModelPricing object with pricing info
+        
+    Raises:
+        ValueError: If model pricing is not found
+    """
+    # Try exact match first
+    if model in MODEL_PRICING:
+        return MODEL_PRICING[model]
+    
+    # Try partial matches for model families
+    for model_key, pricing in MODEL_PRICING.items():
+        if model_key in model:
+            return pricing
+    
+    # Default fallback to GPT-3.5 pricing
+    return MODEL_PRICING["gpt-3.5-turbo"]
+
+
+def estimate_cost(
+    input_tokens: float, 
+    output_tokens: float, 
+    model: str
+) -> float:
+    """
+    Estimate cost based on token count and model.
+    
+    Args:
+        input_tokens: Number of input tokens
+        output_tokens: Number of output tokens
+        model: Model name
+        
+    Returns:
+        Estimated cost in USD
+    """
+    pricing = get_model_pricing_info(model)
+    
+    input_cost = (input_tokens / 1000) * pricing.input_price_per_1k
+    output_cost = (output_tokens / 1000) * pricing.output_price_per_1k
+    
+    return input_cost + output_cost
+
+
+def estimate_cost_from_text(
+    input_text: str, 
+    output_text: str, 
+    model: str,
+    chars_per_token: float = 4.0
+) -> float:
+    """
+    Estimate cost from text lengths using character-to-token heuristic.
+    
+    Args:
+        input_text: Input text
+        output_text: Output text
+        model: Model name
+        chars_per_token: Characters per token ratio (default: 4.0)
+        
+    Returns:
+        Estimated cost in USD
+    """
+    input_tokens = len(input_text) / chars_per_token
+    output_tokens = len(output_text) / chars_per_token
+    
+    return estimate_cost(input_tokens, output_tokens, model)
+
+
+def estimate_whisper_cost(file_size_mb: float, model: str = "whisper-1") -> float:
+    """
+    Estimate Whisper transcription cost based on file size.
+    
+    Args:
+        file_size_mb: File size in MB
+        model: Whisper model name
+        
+    Returns:
+        Estimated cost in USD
+    """
+    # Rough estimate: 1MB ≈ 1 minute of audio
+    estimated_minutes = file_size_mb
+    pricing = get_model_pricing_info(model)
+    
+    return estimated_minutes * pricing.input_price_per_1k
+
+
+def parse_cost(response: Any, model: str) -> Optional[float]:
+    """
+    Parse exact cost from LLM response if available.
+    
+    Args:
+        response: LLM response object
+        model: Model name
+        
+    Returns:
+        Exact cost if available, None otherwise
+    """
+    # TODO: Implement parsing of actual usage data from different providers
+    # This would extract token counts from response.usage if available
+    
+    if hasattr(response, 'usage'):
+        usage = response.usage
+        if hasattr(usage, 'prompt_tokens') and hasattr(usage, 'completion_tokens'):
+            return estimate_cost(
+                input_tokens=usage.prompt_tokens,
+                output_tokens=usage.completion_tokens,
+                model=model
+            )
+    
+    return None
+
+
+def create_usage_info(
+    input_length: int,
+    output_length: int,
+    processing_time: float,
+    estimated_input_tokens: float,
+    estimated_output_tokens: float,
+    file_name: Optional[str] = None,
+    file_size_mb: Optional[float] = None
+) -> Dict[str, Any]:
+    """
+    Create standardized usage info dictionary.
+    
+    Args:
+        input_length: Length of input text/data
+        output_length: Length of output text/data
+        processing_time: Time taken to process
+        estimated_input_tokens: Estimated input tokens
+        estimated_output_tokens: Estimated output tokens
+        file_name: Optional file name
+        file_size_mb: Optional file size in MB
+        
+    Returns:
+        Dictionary with usage information
+    """
+    usage_info = {
+        "input_length": input_length,
+        "output_length": output_length,
+        "estimated_input_tokens": estimated_input_tokens,
+        "estimated_output_tokens": estimated_output_tokens,
+        "processing_time": processing_time,
+    }
+    
+    if file_name is not None:
+        usage_info["file_name"] = file_name
+    
+    if file_size_mb is not None:
+        usage_info["file_size_mb"] = file_size_mb
+        usage_info["estimated_minutes"] = file_size_mb
+    
+    return usage_info 
