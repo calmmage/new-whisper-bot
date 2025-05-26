@@ -16,6 +16,7 @@ from tenacity import (
     wait_exponential,
 )
 
+from botspot.components.new.llm_provider import aquery_llm_text
 from botspot.core.errors import BotspotError
 from src.utils.create_summary import create_summary
 from src.utils.audio_utils import split_audio, Audio
@@ -62,6 +63,7 @@ class AppConfig(BaseSettings):
     chat_model: str = (
         "claude-4-sonnet"  # Default chat model for discussing transcripts and summaries
     )
+    chat_max_tokens: int = 2048
     # todo: allow user to configure
     formatting_model: str = "gpt-4.1-nano"
 
@@ -162,7 +164,6 @@ class App:
             media_file.unlink()
             media_file = mp3_file
 
-        # todo: cut audio inplace with ffmpeg
         parts = await self.cut_audio_with_ffmpeg(media_file)
 
         return parts
@@ -374,4 +375,20 @@ class App:
                 username=username,
                 model=self.config.summary_model,
                 max_tokens=self.config.summary_max_tokens,
+            )
+
+    async def chat_about_transcript(
+        self, full_prompt: str, username: str
+    ) -> str:
+        """
+        Chat about the transcript using the configured chat model.
+        """
+        async with self.chat_semaphore:
+            # Small delay to be nice to the API
+            await asyncio.sleep(0.1)
+            return await aquery_llm_text(
+                prompt=full_prompt,
+                user=username,
+                model=self.config.chat_model,
+                max_tokens=self.config.chat_max_tokens,
             )
