@@ -15,8 +15,6 @@ async def download_file(
     api_hash: Optional[str] = None,
     bot_token: Optional[str] = None,
     in_memory: Optional[bool] = None,
-    # todo: rework destination concept
-    # todo: accept a parameter to download to memory. the same way as aiogram accepts it
 ) -> Union[BinaryIO, Path]:
     try:
         # use my botspot aiogram utils for downloading
@@ -37,9 +35,10 @@ async def download_file(
 
         traceback.print_exc()
 
-        from src.new.utils.download_attachment_pyrogram import download_file_from_aiogram_message
+        from src.new.utils.download_attachment_pyrogram import (
+            download_file_from_aiogram_message,
+        )
 
-        # todo: it makes no sense to use in_memory=True by default here:
         result = await download_file_from_aiogram_message(
             message=message,
             target_dir=target_dir,

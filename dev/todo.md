@@ -1,5 +1,10 @@
 # Todos
 
+## New architecture grok discussion
+https://grok.com/share/bGVnYWN5_832ecdcb-8083-4ef7-bfbf-9ab8411d8697
+
+## Todos - 26 May
+
 - [ ] make sure the bot works for other users (and i have control over who) - try botspot friends
 - [ ] make sure the bot works for anonymous users - and I have control over how much. Did I already implemnt this?
 

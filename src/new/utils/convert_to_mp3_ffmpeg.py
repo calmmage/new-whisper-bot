@@ -7,7 +7,7 @@ import psutil
 from loguru import logger
 
 
-async def convert_to_mp3(
+async def convert_to_mp3_ffmpeg(
     source_path: Path,
     output_path: Optional[Path] = None,
     format: str = "mp3",

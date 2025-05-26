@@ -19,7 +19,6 @@ def main(debug=False) -> None:
     # Initialize bot and dispatcher
     dp = Dispatcher()
     dp.include_router(main_router)
-    dp.include_router(settings_router)
 
     app = App()
     dp["app"] = app

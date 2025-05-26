@@ -5,7 +5,7 @@ from typing import List, Optional
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings
 
-from src.new.utils.convert_to_mp3_ffmpeg import convert_to_mp3
+from src.new.utils.convert_to_mp3_ffmpeg import convert_to_mp3_ffmpeg
 from src.new.create_summary import create_summary
 from src.core.cut_audio import cut_audio_into_pieces
 from src.new.utils.download_attachment_pyrogram import download_file_via_subprocess
@@ -139,7 +139,7 @@ class App(AppBase):
 
     async def convert_video_to_audio(self, media_path: Path) -> Path:
         """Convert video to audio if necessary using ffmpeg"""
-        path = await convert_to_mp3(
+        path = await convert_to_mp3_ffmpeg(
             source_path=media_path, use_memory_profiler=self.config.use_memory_profiler
         )
         # cleanup - delete original file if conversion was successful
