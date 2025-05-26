@@ -206,7 +206,7 @@ class App:
         }
 
     # Main method
-    async def process_message(self, message: AiogramMessage):
+    async def process_message(self, message: AiogramMessage, whisper_model: Optional[str] = None) -> str:
         """
         [x] process_message
         ├── [x] download_attachment
@@ -250,7 +250,7 @@ class App:
         # Store message_id in a context variable to pass to nested methods
         self._current_message_id = message_id
 
-        chunks = await self.process_parts(parts, username=username)
+        chunks = await self.process_parts(parts, username=username, whisper_model=whisper_model)
 
         chunks = await self.format_chunks_with_llm(chunks, username=username)
 
@@ -349,7 +349,7 @@ class App:
     # endregion prepare_parts
 
     # region process_parts
-    async def process_parts(self, parts: Sequence[Audio], username: Optional[str] = None) -> List[str]:
+    async def process_parts(self, parts: Sequence[Audio], username: Optional[str] = None, whisper_model:Optional[str]=None) -> List[str]:
         """
         Process multiple audio parts.
 
@@ -368,7 +368,7 @@ class App:
         for i, part in enumerate(parts):
             logger.info(f"Processing part {i+1}/{len(parts)}")
             # todo: make sure memory is freed after each part.
-            chunks += await self.process_part(part, username=username)
+            chunks += await self.process_part(part, username=username, whisper_model=whisper_model)
             if isinstance(part, Path):
                 if self.config.cleanup_downloads:
                     part.unlink(missing_ok=True)
@@ -394,7 +394,8 @@ class App:
     async def process_part(
         self,
         audio: Audio,
-        username: Optional[str] = None,
+        username: Optional[str] = None
+            , whisper_model:Optional[str]=None
     ) -> List[str]:
         """
         Process an audio part by splitting it into chunks and transcribing them.
@@ -430,7 +431,7 @@ class App:
         transcriptions = await self.parse_audio_chunks(
             audio_chunks,
             username=username,
-            model_name=self.config.transcription_model
+            model_name=whisper_model or self.config.transcription_model
         )
 
         return transcriptions

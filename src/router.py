@@ -71,7 +71,7 @@ async def main_chat_handler(message: Message, app: App, state: FSMContext):
 
     # Transcribe the audio
     # Note: process_message already sets and clears _current_message_id internally
-    transcription = await app.process_message(message)
+    transcription = await app.process_message(message, whisper_model=model)
     await reply_safe(message, transcription)
     await notif.delete()
 
