@@ -3,7 +3,6 @@ from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 from botspot import answer_safe, commands_menu, get_message_text, reply_safe
-from botspot.components.new.llm_provider import aquery_llm_text
 from botspot.user_interactions import ask_user_choice
 from botspot.utils import send_safe
 
@@ -99,7 +98,10 @@ async def _reply_chat_handler(message: Message, app: App):
 
     # todo: reconstruct full chat history from reply chain
     prompt = await get_message_text(message, include_reply=True)
-    response = await aquery_llm_text(prompt=prompt, model=app.config.summary_model)
+    assert message.from_user is not None and message.from_user.username is not None
+    response = await app.chat_about_transcript(
+        full_prompt=prompt, username=message.from_user.username
+    )
     await reply_safe(
         message,
         response,
