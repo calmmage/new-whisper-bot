@@ -48,7 +48,16 @@ Bugfix
 - [ ] Merge chunks - seems broken now
 
 Finish
-- [ ] apply basic formatting to text chunks.
+- [x] apply basic formatting to text chunks.
+- [x] "Add formatting disable threshold to config" - Default 4000 characters
+- [x] "Investigate formatting cost calculation" - Check where and how it's calculated
+- [x] "Skip formatting if total chunks length exceeds threshold"
+- [x] Fix gpt-4.1-nano pricing in cost calculation
+- [x] "Completely rework the cost calculation and tracking"
+  - [x] Fix async safety issue with per-user message tracking
+  - [x] Create cost_tracking utility with proper model pricing
+  - [x] Add estimate_cost, parse_cost, get_model_pricing_info utils
+  - [x] Refactor all cost calculations to use new utilities
 
 Rework
 - [ ] rework audio cutting: use ffmpeg to cut in-place first into big chunks, then pydub to cut in-memory

@@ -70,7 +70,7 @@ async def main_chat_handler(message: Message, app: App, state: FSMContext):
     )
 
     # Transcribe the audio
-    # Note: process_message already sets and clears _current_message_id internally
+    # Note: process_message already sets and clears per-user message_id internally
     transcription = await app.process_message(message, whisper_model=model)
     await reply_safe(message, transcription)
     await notif.delete()
@@ -78,13 +78,13 @@ async def main_chat_handler(message: Message, app: App, state: FSMContext):
     # Create and send summary
     notif = await reply_safe(message, "🔄 Creating summary...")
 
-    # Set message_id context variable
-    app._current_message_id = message.message_id
+    # Set message_id for this user
+    app._user_message_ids[username] = message.message_id
 
     summary = await app.create_summary(transcription, username=username)
 
-    # Clear message_id context variable
-    app._current_message_id = None
+    # Clear message_id for this user
+    app._user_message_ids.pop(username, None)
 
     await reply_safe(message, f"📋 <b>Summary:</b>\n\n{summary}")
     await notif.delete()
@@ -131,14 +131,14 @@ async def _reply_chat_handler(message: Message, app: App):
     # Get cost before chat operation
     before_cost = await app.get_total_cost(username)
 
-    # Set message_id context variable
-    app._current_message_id = message.message_id
+    # Set message_id for this user
+    app._user_message_ids[username] = message.message_id
 
     # Process chat request
     response = await app.chat_about_transcript(full_prompt=prompt, username=username)
 
-    # Clear message_id context variable
-    app._current_message_id = None
+    # Clear message_id for this user
+    app._user_message_ids.pop(username, None)
 
     # Send response to user
     await reply_safe(

@@ -32,7 +32,6 @@ from src.utils.cost_tracking import (
     estimate_cost_from_text,
     estimate_whisper_cost,
     create_usage_info,
-    parse_cost,
 )
 
 
@@ -75,7 +74,9 @@ class AppConfig(BaseSettings):
     chat_max_tokens: int = 2048
     # todo: allow user to configure
     formatting_model: str = "gpt-4.1-nano"
-    formatting_disable_threshold: int = 4000  # Skip formatting if total chunks length exceeds this
+    formatting_disable_threshold: int = (
+        4000  # Skip formatting if total chunks length exceeds this
+    )
 
     class Config:
         env_file = ".env"
@@ -102,7 +103,7 @@ class App:
 
         # Initialize MongoDB connection
         self._db = None
-        
+
         # Per-user message tracking for async safety
         self._user_message_ids: Dict[str, Optional[int]] = {}
 
@@ -111,6 +112,10 @@ class App:
         if self._db is None:
             self._db = get_database()
         return self._db
+
+    def _get_user_message_id(self, username: str) -> Optional[int]:
+        """Get the current message ID for a user."""
+        return self._user_message_ids.get(username)
 
     async def log_event(
         self, event_type: str, user_id: str, data: Optional[Dict[str, Any]] = None
@@ -268,8 +273,8 @@ class App:
 
         parts = await self.prepare_parts(media_file)
 
-        # Store message_id in a context variable to pass to nested methods
-        self._current_message_id = message_id
+        # Store message_id per user for async safety
+        self._user_message_ids[username] = message_id
 
         chunks = await self.process_parts(
             parts, username=username, whisper_model=whisper_model
@@ -292,8 +297,8 @@ class App:
         )
         await self.log_event("file_processing_complete", username, completion_info)
 
-        # Clear the context variable
-        self._current_message_id = None
+        # Clear the user's message ID
+        self._user_message_ids.pop(username, None)
 
         return result
 
@@ -536,20 +541,20 @@ class App:
                 f"Transcription complete for {audio_file.name}: {len(transcription)} characters in {processing_time:.2f}s"
             )
 
-            # Estimate cost based on file size (approximate)
-            # Whisper pricing: $0.006 per minute
-            # Rough estimate: 1MB ≈ 1 minute of audio
-            estimated_cost = file_size_mb * 0.006
+            # Estimate cost using utility
+            estimated_cost = estimate_whisper_cost(file_size_mb, model_name)
 
             # Log cost information if username is provided
             if username:
-                usage_info = {
-                    "file_name": audio_file.name,
-                    "file_size_mb": file_size_mb,
-                    "processing_time": processing_time,
-                    "characters": len(transcription),
-                    "estimated_minutes": file_size_mb,
-                }
+                usage_info = create_usage_info(
+                    input_length=len(audio_data),
+                    output_length=len(transcription),
+                    processing_time=processing_time,
+                    estimated_input_tokens=file_size_mb,  # For Whisper, "tokens" = minutes
+                    estimated_output_tokens=0,
+                    file_name=audio_file.name,
+                    file_size_mb=file_size_mb,
+                )
 
                 await self.log_cost(
                     operation="transcription",
@@ -557,7 +562,7 @@ class App:
                     model=model_name,
                     cost=estimated_cost,
                     usage=usage_info,
-                    message_id=self._current_message_id,
+                    message_id=self._get_user_message_id(username),
                 )
 
             return transcription
@@ -627,15 +632,17 @@ class App:
         """
         # Check total chunks length against threshold
         total_length = sum(len(chunk) for chunk in chunks)
-        
+
         if total_length > self.config.formatting_disable_threshold:
             logger.info(
                 f"Skipping formatting: total chunks length ({total_length} chars) "
                 f"exceeds threshold ({self.config.formatting_disable_threshold} chars)"
             )
             return chunks
-        
-        logger.info(f"Formatting {len(chunks)} text chunks with LLM (total: {total_length} chars)")
+
+        logger.info(
+            f"Formatting {len(chunks)} text chunks with LLM (total: {total_length} chars)"
+        )
         start_time = time.time()
 
         # Create tasks for all chunks
@@ -684,37 +691,23 @@ class App:
                 f"Formatting complete: {len(chunk)} → {len(formatted_text)} characters in {processing_time:.2f}s"
             )
 
-            # Estimate cost based on token count (approximate)
-            # Rough estimate: 1 token ≈ 4 characters
+            # Estimate cost using utility
+            estimated_cost = estimate_cost_from_text(
+                input_text=chunk,
+                output_text=formatted_text,
+                model=self.config.formatting_model,
+            )
+
+            # Create usage info
             input_tokens = len(chunk) / 4
             output_tokens = len(formatted_text) / 4
-
-            # Cost estimation based on model
-            model = self.config.formatting_model
-            if "gpt-4.1-nano" in model:
-                # GPT-4.1-nano pricing: $0.0001 per 1K input tokens, $0.0004 per 1K output tokens
-                estimated_cost = (input_tokens * 0.0001 / 1000) + (
-                    output_tokens * 0.0004 / 1000
-                )
-            elif "gpt-4" in model:
-                # GPT-4 pricing: $0.01 per 1K input tokens, $0.03 per 1K output tokens
-                estimated_cost = (input_tokens * 0.01 / 1000) + (
-                    output_tokens * 0.03 / 1000
-                )
-            else:
-                # Default to GPT-3.5 pricing: $0.0015 per 1K input tokens, $0.002 per 1K output tokens
-                estimated_cost = (input_tokens * 0.0015 / 1000) + (
-                    output_tokens * 0.002 / 1000
-                )
-
-            # Log cost information
-            usage_info = {
-                "input_length": len(chunk),
-                "output_length": len(formatted_text),
-                "estimated_input_tokens": input_tokens,
-                "estimated_output_tokens": output_tokens,
-                "processing_time": processing_time,
-            }
+            usage_info = create_usage_info(
+                input_length=len(chunk),
+                output_length=len(formatted_text),
+                processing_time=processing_time,
+                estimated_input_tokens=input_tokens,
+                estimated_output_tokens=output_tokens,
+            )
 
             await self.log_cost(
                 operation="formatting",
@@ -722,7 +715,7 @@ class App:
                 model=self.config.formatting_model,
                 cost=estimated_cost,
                 usage=usage_info,
-                message_id=self._current_message_id,
+                message_id=self._get_user_message_id(username),
             )
 
             return formatted_text
@@ -761,37 +754,23 @@ class App:
                 f"Summary creation complete: {len(transcript)} → {len(summary)} characters in {processing_time:.2f}s"
             )
 
-            # Estimate cost based on token count (approximate)
-            # Rough estimate: 1 token ≈ 4 characters
+            # Estimate cost using utility
+            estimated_cost = estimate_cost_from_text(
+                input_text=transcript,
+                output_text=summary,
+                model=self.config.summary_model,
+            )
+
+            # Create usage info
             input_tokens = len(transcript) / 4
             output_tokens = len(summary) / 4
-
-            # Cost estimation based on model
-            model = self.config.summary_model
-            if "claude-4" in model:
-                # Claude-4 pricing: $0.015 per 1K input tokens, $0.075 per 1K output tokens
-                estimated_cost = (input_tokens * 0.015 / 1000) + (
-                    output_tokens * 0.075 / 1000
-                )
-            elif "claude-3" in model:
-                # Claude-3 pricing: $0.008 per 1K input tokens, $0.024 per 1K output tokens
-                estimated_cost = (input_tokens * 0.008 / 1000) + (
-                    output_tokens * 0.024 / 1000
-                )
-            else:
-                # Default to GPT-4 pricing: $0.01 per 1K input tokens, $0.03 per 1K output tokens
-                estimated_cost = (input_tokens * 0.01 / 1000) + (
-                    output_tokens * 0.03 / 1000
-                )
-
-            # Log cost information
-            usage_info = {
-                "input_length": len(transcript),
-                "output_length": len(summary),
-                "estimated_input_tokens": input_tokens,
-                "estimated_output_tokens": output_tokens,
-                "processing_time": processing_time,
-            }
+            usage_info = create_usage_info(
+                input_length=len(transcript),
+                output_length=len(summary),
+                processing_time=processing_time,
+                estimated_input_tokens=input_tokens,
+                estimated_output_tokens=output_tokens,
+            )
 
             # Log event for summary creation
             await self.log_event(
@@ -810,7 +789,7 @@ class App:
                 model=self.config.summary_model,
                 cost=estimated_cost,
                 usage=usage_info,
-                message_id=self._current_message_id,
+                message_id=self._get_user_message_id(username),
             )
 
             return summary
@@ -852,37 +831,23 @@ class App:
                 f"Chat response complete: {len(full_prompt)} → {len(response)} characters in {processing_time:.2f}s"
             )
 
-            # Estimate cost based on token count (approximate)
-            # Rough estimate: 1 token ≈ 4 characters
+            # Estimate cost using utility
+            estimated_cost = estimate_cost_from_text(
+                input_text=full_prompt,
+                output_text=response,
+                model=self.config.chat_model,
+            )
+
+            # Create usage info
             input_tokens = len(full_prompt) / 4
             output_tokens = len(response) / 4
-
-            # Cost estimation based on model
-            model = self.config.chat_model
-            if "claude-4" in model:
-                # Claude-4 pricing: $0.015 per 1K input tokens, $0.075 per 1K output tokens
-                estimated_cost = (input_tokens * 0.015 / 1000) + (
-                    output_tokens * 0.075 / 1000
-                )
-            elif "claude-3" in model:
-                # Claude-3 pricing: $0.008 per 1K input tokens, $0.024 per 1K output tokens
-                estimated_cost = (input_tokens * 0.008 / 1000) + (
-                    output_tokens * 0.024 / 1000
-                )
-            else:
-                # Default to GPT-4 pricing: $0.01 per 1K input tokens, $0.03 per 1K output tokens
-                estimated_cost = (input_tokens * 0.01 / 1000) + (
-                    output_tokens * 0.03 / 1000
-                )
-
-            # Log cost information
-            usage_info = {
-                "input_length": len(full_prompt),
-                "output_length": len(response),
-                "estimated_input_tokens": input_tokens,
-                "estimated_output_tokens": output_tokens,
-                "processing_time": processing_time,
-            }
+            usage_info = create_usage_info(
+                input_length=len(full_prompt),
+                output_length=len(response),
+                processing_time=processing_time,
+                estimated_input_tokens=input_tokens,
+                estimated_output_tokens=output_tokens,
+            )
 
             # Log completion event
             await self.log_event(
@@ -901,7 +866,7 @@ class App:
                 model=self.config.chat_model,
                 cost=estimated_cost,
                 usage=usage_info,
-                message_id=self._current_message_id,
+                message_id=self._get_user_message_id(username),
             )
 
             return response
