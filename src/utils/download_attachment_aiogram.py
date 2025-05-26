@@ -1,4 +1,3 @@
-
 from pathlib import Path
 from typing import BinaryIO, Optional, Union
 
@@ -47,10 +46,19 @@ def extract_file_name_from_aiogram_message(
     msg: AiogramMessage, use_original_file_name: bool = True
 ) -> str:
     media, media_type, ext = get_media_and_media_type(msg)
-    if (not use_original_file_name) or (media_type in ("voice", "video_note", "photo")):
+    use_name = use_original_file_name
+    if media_type in ("voice", "video_note", "photo"):
+        use_name = False
+    else:
+        assert isinstance(media, (Audio, Video, Document))
+        if media.file_name is None:
+            use_name = False
+    if not use_name:
         short_id = media.file_id[-12:]
         return f"{media_type}_{short_id}.{ext}"
     assert isinstance(media, (Document, Audio, Video))
+    assert media.file_name is not None
+
     return media.file_name
 
 

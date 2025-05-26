@@ -1,7 +1,7 @@
 from difflib import SequenceMatcher
 from typing import Iterable
 
-import loguru
+from loguru import logger
 
 
 def normalize_text(text):
@@ -60,10 +60,7 @@ def merge_two_chunks(
     chunk2,
     buffer=DEFAULT_BUFFER,
     match_cutoff=DEFAULT_MATCH_CUTOFF,
-    logger=None,
 ):
-    if logger is None:
-        logger = loguru.logger
     ending = " ".join(chunk1.split()[-buffer:])
     beginning = " ".join(chunk2.split()[:buffer])
     N = len(ending)
@@ -106,6 +103,6 @@ def merge_all_chunks(
     result = ""
     for chunk in filtered_chunks:
         result = merge_two_chunks(
-            result, chunk, buffer=buffer, match_cutoff=match_cutoff, logger=logger
+            result, chunk, buffer=buffer, match_cutoff=match_cutoff
         )
     return result

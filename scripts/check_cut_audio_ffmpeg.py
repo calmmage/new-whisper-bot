@@ -16,16 +16,19 @@ from loguru import logger
 # Add the src directory to the Python path
 sys.path.append(str(Path(__file__).parent.parent))
 
-from src.new.utils.cut_audio_ffmpeg import cut_audio_ffmpeg
+from src.utils.cut_audio_ffmpeg import cut_audio_ffmpeg
 
 
 def get_audio_duration(audio_path: Path) -> float:
     """Get the duration of an audio file using ffprobe."""
     cmd = [
         "ffprobe",
-        "-v", "error",
-        "-show_entries", "format=duration",
-        "-of", "default=noprint_wrappers=1:nokey=1",
+        "-v",
+        "error",
+        "-show_entries",
+        "format=duration",
+        "-of",
+        "default=noprint_wrappers=1:nokey=1",
         str(audio_path),
     ]
 
@@ -60,24 +63,28 @@ async def test_cut_audio_ffmpeg(audio_path: Path, output_dir: Path, num_parts: i
 
     try:
         start_time = asyncio.get_event_loop().time()
-        
+
         # Cut the audio
         parts_created = await cut_audio_ffmpeg(
-            audio_file=audio_path,
-            num_parts=num_parts,
-            target_dir=test_output_dir
+            audio_file=audio_path, num_parts=num_parts, target_dir=test_output_dir
         )
-        
+
         end_time = asyncio.get_event_loop().time()
-        
-        logger.info(f"Created {parts_created} parts in {end_time - start_time:.2f} seconds")
+
+        logger.info(
+            f"Created {parts_created} parts in {end_time - start_time:.2f} seconds"
+        )
 
         # Check the created files
-        created_files = list(test_output_dir.glob(f"{audio_path.stem}_part_*{audio_path.suffix}"))
+        created_files = list(
+            test_output_dir.glob(f"{audio_path.stem}_part_*{audio_path.suffix}")
+        )
         created_files.sort()
 
         if len(created_files) != parts_created:
-            logger.error(f"Mismatch: function returned {parts_created} but found {len(created_files)} files")
+            logger.error(
+                f"Mismatch: function returned {parts_created} but found {len(created_files)} files"
+            )
             return False
 
         total_duration = 0
@@ -94,16 +101,22 @@ async def test_cut_audio_ffmpeg(audio_path: Path, output_dir: Path, num_parts: i
             try:
                 duration = get_audio_duration(part_file)
                 total_duration += duration
-                logger.info(f"Part {i}: {part_file.name} - {duration:.2f}s ({file_size / (1024*1024):.2f} MB)")
+                logger.info(
+                    f"Part {i}: {part_file.name} - {duration:.2f}s ({file_size / (1024*1024):.2f} MB)"
+                )
             except Exception as e:
                 logger.error(f"Error getting duration for {part_file}: {e}")
                 return False
 
-        logger.info(f"Total duration of parts: {total_duration:.2f}s (original: {original_duration:.2f}s)")
-        
+        logger.info(
+            f"Total duration of parts: {total_duration:.2f}s (original: {original_duration:.2f}s)"
+        )
+
         # Check if total duration is close to original (within 1 second tolerance)
         if abs(total_duration - original_duration) > 1.0:
-            logger.warning(f"Duration mismatch: {abs(total_duration - original_duration):.2f}s difference")
+            logger.warning(
+                f"Duration mismatch: {abs(total_duration - original_duration):.2f}s difference"
+            )
 
         return True
 
@@ -125,13 +138,15 @@ async def main():
 
     # Find audio files
     audio_files = (
-        list(sample_dir.glob("*.m4a")) +
-        list(sample_dir.glob("*.mp3")) +
-        list(sample_dir.glob("*.ogg"))
+        list(sample_dir.glob("*.m4a"))
+        + list(sample_dir.glob("*.mp3"))
+        + list(sample_dir.glob("*.ogg"))
     )
-    
+
     # Add the specific file from the old script
-    specific_file = Path("/Users/petrlavrov/work/experiments/new-whisper-bot/scripts/output/convert_video/GMT20250321-200734_Recording_1920x1170_standard.mp3")
+    specific_file = Path(
+        "/Users/petrlavrov/work/experiments/new-whisper-bot/scripts/output/convert_video/GMT20250321-200734_Recording_1920x1170_standard.mp3"
+    )
     if specific_file.exists():
         audio_files.append(specific_file)
 
@@ -144,18 +159,20 @@ async def main():
 
     for audio_file in audio_files:
         logger.info(f"Testing with {audio_file}")
-        
+
         for num_parts in test_cases:
             success = await test_cut_audio_ffmpeg(
-                audio_path=audio_file,
-                output_dir=output_dir,
-                num_parts=num_parts
+                audio_path=audio_file, output_dir=output_dir, num_parts=num_parts
             )
-            
+
             if success:
-                logger.info(f"✓ Test passed for {audio_file.name} with {num_parts} parts")
+                logger.info(
+                    f"✓ Test passed for {audio_file.name} with {num_parts} parts"
+                )
             else:
-                logger.error(f"✗ Test failed for {audio_file.name} with {num_parts} parts")
+                logger.error(
+                    f"✗ Test failed for {audio_file.name} with {num_parts} parts"
+                )
 
 
 if __name__ == "__main__":
@@ -164,4 +181,4 @@ if __name__ == "__main__":
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Run the main function
-    asyncio.run(main()) 
+    asyncio.run(main())

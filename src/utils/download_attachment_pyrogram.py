@@ -2,7 +2,7 @@ import asyncio
 import os
 import re
 from pathlib import Path
-from typing import Optional, Union
+from typing import Optional, Union, BinaryIO
 
 from aiogram.types import Message as AiogramMessage
 from loguru import logger
@@ -206,7 +206,6 @@ async def download_file_with_pyrogram(
     if target_dir is None:
         target_dir = Path("../../utils")
 
-    # todo: figure out the file name - get from attachment or smth?
     if file_name is None:
         file_name = extract_file_name_from_pyrogram_message(
             pyrogram_message, use_original_file_name
@@ -219,6 +218,7 @@ async def download_file_with_pyrogram(
         file_name=str(file_path), in_memory=in_memory
     )
     if in_memory:
+        assert isinstance(result, BinaryIO)
         return result
     else:
         return file_path
@@ -336,9 +336,10 @@ if __name__ == "__main__":
             api_hash=args.api_hash,
             bot_token=args.bot_token,
             check_aiogram=False,  # Disable aiogram check in subprocess
+            in_memory=False
         )
     )
-
+    assert isinstance(downloaded_file_path, Path)
     downloaded_file_path = downloaded_file_path.absolute()
 
     print(f"Downloaded file path: {downloaded_file_path}")

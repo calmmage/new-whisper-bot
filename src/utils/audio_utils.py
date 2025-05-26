@@ -1,31 +1,25 @@
 from io import BytesIO
 from typing import BinaryIO
-
-from typing import List
-import loguru
-from bot_base.utils.gpt_utils import (
-    WHISPER_RATE_LIMIT,
-    Audio,
-)
+from loguru import logger
+from typing import List, Union
 from pydub import AudioSegment
 
 DEFAULT_PERIOD = 120 * 1000  # 2 minutes
 DEFAULT_BUFFER = 5 * 1000  # 5 seconds
 
+Audio = Union[AudioSegment, BytesIO, BinaryIO, str]
 
 def split_audio(
-    audio: Audio, period=DEFAULT_PERIOD, buffer=DEFAULT_BUFFER, logger=None
+    audio: Audio, period=DEFAULT_PERIOD, buffer=DEFAULT_BUFFER
 ) -> List[BytesIO]:
     if isinstance(audio, (str, BytesIO, BinaryIO)):
         logger.debug(f"Loading audio from {audio}")
         audio = AudioSegment.from_file(audio)
-    if logger is None:
-        logger = loguru.logger
+        
+    assert isinstance(audio, AudioSegment)
+
     chunks = []
     s = 0
-
-    if len(audio) / period > WHISPER_RATE_LIMIT - 5:
-        period = len(audio) // (WHISPER_RATE_LIMIT - 5)
 
     logger.debug("Splitting audio into chunks")
     while s + period < len(audio):

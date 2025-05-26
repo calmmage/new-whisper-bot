@@ -1,6 +1,6 @@
 from unittest.mock import Mock
 
-from src.new.utils.text_utils import (
+from src.utils.text_utils import (
     find_segment_pos,
     merge_all_chunks,
     merge_two_chunks,
@@ -99,7 +99,7 @@ class TestMergeTwoChunks:
         chunk1 = "First chunk with overlap"
         chunk2 = "overlap and second chunk"
 
-        result = merge_two_chunks(chunk1, chunk2, logger=mock_logger)
+        result = merge_two_chunks(chunk1, chunk2)
 
         # Verify logger was called
         assert mock_logger.debug.called
@@ -168,7 +168,7 @@ class TestMergeAllChunks:
         mock_logger = Mock()
         chunks = ["First chunk overlap", "overlap second chunk"]
 
-        result = merge_all_chunks(chunks, logger=mock_logger)
+        merge_all_chunks(chunks, logger=mock_logger)
 
         # Verify logger was used in underlying merge_two_chunks calls
         assert mock_logger.debug.called

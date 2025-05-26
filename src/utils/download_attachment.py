@@ -3,7 +3,7 @@ from pathlib import Path
 from loguru import logger
 from aiogram.types import Message as AiogramMessage
 
-from src.new.utils.download_attachment_aiogram import download_file_aiogram
+from src.utils.download_attachment_aiogram import download_file_aiogram
 
 
 async def download_file(
@@ -35,7 +35,7 @@ async def download_file(
 
         traceback.print_exc()
 
-        from src.new.utils.download_attachment_pyrogram import (
+        from src.utils.download_attachment_pyrogram import (
             download_file_from_aiogram_message,
         )
 
