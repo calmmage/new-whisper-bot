@@ -5,26 +5,52 @@ from dataclasses import dataclass
 @dataclass
 class ModelPricing:
     """Pricing information for a model."""
-    input_price_per_1k: float  # Price per 1K input tokens
-    output_price_per_1k: float  # Price per 1K output tokens
+
+    input_price_per_1m: float  # Price per 1M input tokens
+    output_price_per_1m: float  # Price per 1M output tokens
     currency: str = "USD"
 
 
-# Model pricing database
+# Model pricing database (prices per 1M tokens)
 MODEL_PRICING: Dict[str, ModelPricing] = {
-    # OpenAI GPT models
-    "gpt-4.1-nano": ModelPricing(input_price_per_1k=0.0001, output_price_per_1k=0.0004),
-    "gpt-4": ModelPricing(input_price_per_1k=0.01, output_price_per_1k=0.03),
-    "gpt-4-turbo": ModelPricing(input_price_per_1k=0.01, output_price_per_1k=0.03),
-    "gpt-3.5-turbo": ModelPricing(input_price_per_1k=0.0015, output_price_per_1k=0.002),
+    # Anthropic Models
+    "claude-3.5-haiku": ModelPricing(input_price_per_1m=0.80, output_price_per_1m=4.00),
+    "claude-3-5-haiku": ModelPricing(input_price_per_1m=0.80, output_price_per_1m=4.00),
+    "claude-3.5-sonnet": ModelPricing(input_price_per_1m=3.00, output_price_per_1m=15.00),
+    "claude-3-5-sonnet": ModelPricing(input_price_per_1m=3.00, output_price_per_1m=15.00),
+    "claude-3.7": ModelPricing(input_price_per_1m=3.00, output_price_per_1m=15.00),
+    "claude-4": ModelPricing(input_price_per_1m=3.00, output_price_per_1m=15.00),
+    "claude-4-sonnet": ModelPricing(input_price_per_1m=3.00, output_price_per_1m=15.00),
     
-    # Claude models
-    "claude-4-sonnet": ModelPricing(input_price_per_1k=0.015, output_price_per_1k=0.075),
-    "claude-3-sonnet": ModelPricing(input_price_per_1k=0.008, output_price_per_1k=0.024),
-    "claude-3-haiku": ModelPricing(input_price_per_1k=0.00025, output_price_per_1k=0.00125),
+    # OpenAI Models - Cheap
+    "gpt-4o-mini": ModelPricing(input_price_per_1m=0.15, output_price_per_1m=0.60),
+    "o4-mini": ModelPricing(input_price_per_1m=0.55, output_price_per_1m=2.20),
+    "gpt-4.1-nano": ModelPricing(input_price_per_1m=0.10, output_price_per_1m=0.40),
     
-    # Whisper models (pricing per minute, not tokens)
-    "whisper-1": ModelPricing(input_price_per_1k=0.006, output_price_per_1k=0.0),  # $0.006 per minute
+    # OpenAI Models - Mid
+    "gpt-4o": ModelPricing(input_price_per_1m=2.50, output_price_per_1m=10.00),
+    "gpt-4.1": ModelPricing(input_price_per_1m=5.00, output_price_per_1m=15.00),
+    
+    # OpenAI Models - Max
+    "o3": ModelPricing(input_price_per_1m=10.00, output_price_per_1m=40.00),
+    "gpt-4": ModelPricing(input_price_per_1m=30.00, output_price_per_1m=60.00),
+    "o1-pro": ModelPricing(input_price_per_1m=20.00, output_price_per_1m=80.00),
+    
+    # Google Models
+    "gemini-2.5-flash": ModelPricing(input_price_per_1m=0.15, output_price_per_1m=0.60),
+    "gemini-2.5-pro": ModelPricing(input_price_per_1m=1.25, output_price_per_1m=10.00),
+    
+    # xAI Models
+    "grok-3-mini": ModelPricing(input_price_per_1m=1.00, output_price_per_1m=5.00),  # Estimated
+    "grok-3": ModelPricing(input_price_per_1m=5.00, output_price_per_1m=15.00),  # Estimated
+    
+    # Legacy models for backward compatibility
+    "gpt-3.5-turbo": ModelPricing(input_price_per_1m=1.50, output_price_per_1m=2.00),
+    "claude-3-sonnet": ModelPricing(input_price_per_1m=8.00, output_price_per_1m=24.00),
+    "claude-3-haiku": ModelPricing(input_price_per_1m=0.25, output_price_per_1m=1.25),
+    
+    # Whisper models (pricing per minute, stored as cost per minute * 1000 for consistency)
+    "whisper-1": ModelPricing(input_price_per_1m=6.00, output_price_per_1m=0.0),  # $0.006 per minute
 }
 
 
@@ -72,8 +98,8 @@ def estimate_cost(
     """
     pricing = get_model_pricing_info(model)
     
-    input_cost = (input_tokens / 1000) * pricing.input_price_per_1k
-    output_cost = (output_tokens / 1000) * pricing.output_price_per_1k
+    input_cost = (input_tokens / 1_000_000) * pricing.input_price_per_1m
+    output_cost = (output_tokens / 1_000_000) * pricing.output_price_per_1m
     
     return input_cost + output_cost
 
@@ -117,7 +143,8 @@ def estimate_whisper_cost(file_size_mb: float, model: str = "whisper-1") -> floa
     estimated_minutes = file_size_mb
     pricing = get_model_pricing_info(model)
     
-    return estimated_minutes * pricing.input_price_per_1k
+    # Whisper pricing is stored as $0.006 per minute, stored as 6.00 in input_price_per_1m
+    return estimated_minutes * (pricing.input_price_per_1m / 1000)
 
 
 def parse_cost(response: Any, model: str) -> Optional[float]:

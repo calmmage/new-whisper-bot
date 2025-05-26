@@ -173,7 +173,7 @@ class App:
         }
 
         if cost is not None:
-            cost_data["cost"] = str(cost)
+            cost_data["cost"] = cost
 
         if message_id is not None:
             cost_data["message_id"] = str(message_id)
@@ -205,7 +205,9 @@ class App:
         model_costs = {}
 
         for cost_entry in costs:
-            cost = cost_entry.get("cost", 0.0)
+            cost_raw = cost_entry.get("cost", 0.0)
+            # Handle both string and float costs for backward compatibility
+            cost = float(cost_raw) if cost_raw is not None else 0.0
             operation = cost_entry.get("operation", "unknown")
             model = cost_entry.get("model", "unknown")
 

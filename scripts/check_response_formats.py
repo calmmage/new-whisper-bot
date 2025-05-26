@@ -24,11 +24,14 @@ from pydub import AudioSegment
 sys.path.append(str(Path(__file__).parent.parent))
 
 from botspot.components.new.llm_provider import aquery_llm_raw
-from src.app import AppConfig
+from src.utils.cost_tracking import parse_cost
 
 
 def inspect_response(response: Any, provider_name: str) -> Dict[str, Any]:
     """Inspect a response object and extract relevant information."""
+    # Extract model name from provider name for parse_cost
+    model_name = provider_name.split('_')[-1] if '_' in provider_name else "gpt-4.1-nano"
+    
     info = {
         "provider": provider_name,
         "type": type(response).__name__,
@@ -36,8 +39,18 @@ def inspect_response(response: Any, provider_name: str) -> Dict[str, Any]:
         "has_cost": False,
         "usage_info": None,
         "cost_info": None,
+        "parsed_cost": None,
         "raw_response": str(response)[:500] + "..." if len(str(response)) > 500 else str(response)
     }
+    
+    # Try to parse cost using our utility
+    try:
+        parsed_cost = parse_cost(response, model_name)
+        if parsed_cost is not None:
+            info["parsed_cost"] = parsed_cost
+            info["has_cost"] = True
+    except Exception as e:
+        info["parse_cost_error"] = str(e)
     
     # Check for usage information
     if hasattr(response, 'usage'):
@@ -97,12 +110,18 @@ async def test_llm_providers() -> List[Dict[str, Any]]:
     
     # Test different models
     models_to_test = [
+        "claude-3.5-haiku",
+        "claude-3.5-sonnet", 
+        "claude-3.7",
+        "o4-mini",
         "gpt-4.1-nano",
-        "gpt-4",
-        "gpt-3.5-turbo", 
-        "claude-4-sonnet",
-        "claude-3.5-sonnet",
-        
+        "gpt-4o",
+        "gpt-4.1",
+        "o3",
+        "gemini-2.5-flash",
+        "gemini-2.5-pro",
+        "grok-3-mini",
+        "grok-3",
     ]
     
     for model in models_to_test:
@@ -138,10 +157,10 @@ async def test_openai_whisper() -> List[Dict[str, Any]]:
     
     try:
         # Load config to get OpenAI API key
-        config = AppConfig()
+        import os
         
         client = openai.AsyncOpenAI(
-            api_key=config.openai_api_key.get_secret_value()
+            api_key=os.getenv("OPENAI_API_KEY")
         )
         
         # Create test audio
@@ -191,13 +210,13 @@ async def test_openai_chat() -> List[Dict[str, Any]]:
     
     try:
         # Load config to get OpenAI API key
-        config = AppConfig()
+        import os
         
         client = openai.AsyncOpenAI(
-            api_key=config.openai_api_key.get_secret_value()
+            api_key=os.getenv("OPENAI_API_KEY")
         )
         
-        models_to_test = ["gpt-4.1-nano", "gpt-4", "gpt-3.5-turbo"]
+        models_to_test = ["gpt-4.1-nano", "gpt-4o", "o4-mini"]
         
         for model in models_to_test:
             try:
@@ -274,6 +293,8 @@ def print_summary(results: List[Dict[str, Any]]) -> None:
             logger.info(f"\n{result['provider']}:")
             for key, value in result["usage_info"]["data"].items():
                 logger.info(f"  {key}: {value}")
+            if result.get("parsed_cost") is not None:
+                logger.info(f"  parsed_cost: ${result['parsed_cost']:.6f}")
 
 
 async def main():

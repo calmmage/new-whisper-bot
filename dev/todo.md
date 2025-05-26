@@ -58,6 +58,9 @@ Finish
   - [x] Create cost_tracking utility with proper model pricing
   - [x] Add estimate_cost, parse_cost, get_model_pricing_info utils
   - [x] Refactor all cost calculations to use new utilities
+- [x] Fix string conversion bug in cost calculation causing TypeError
+- [x] Update model pricing database with current 2025 models and accurate pricing
+- [x] Update check_response_formats.py script to use current models and parse_cost utility
 
 Rework
 - [ ] rework audio cutting: use ffmpeg to cut in-place first into big chunks, then pydub to cut in-memory
