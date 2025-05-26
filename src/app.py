@@ -28,6 +28,12 @@ from src.utils.cut_audio_ffmpeg import cut_audio_ffmpeg
 from src.utils.download_attachment import download_file
 from src.utils.format_text_with_llm import format_text_with_llm
 from src.utils.text_utils import merge_all_chunks
+from src.utils.cost_tracking import (
+    estimate_cost_from_text,
+    estimate_whisper_cost,
+    create_usage_info,
+    parse_cost,
+)
 
 
 class AppConfig(BaseSettings):
@@ -69,6 +75,7 @@ class AppConfig(BaseSettings):
     chat_max_tokens: int = 2048
     # todo: allow user to configure
     formatting_model: str = "gpt-4.1-nano"
+    formatting_disable_threshold: int = 4000  # Skip formatting if total chunks length exceeds this
 
     class Config:
         env_file = ".env"
@@ -95,6 +102,9 @@ class App:
 
         # Initialize MongoDB connection
         self._db = None
+        
+        # Per-user message tracking for async safety
+        self._user_message_ids: Dict[str, Optional[int]] = {}
 
     @property
     def db(self):
@@ -103,7 +113,7 @@ class App:
         return self._db
 
     async def log_event(
-        self, event_type: str, user_id: str, data: Dict[str, Any] = None
+        self, event_type: str, user_id: str, data: Optional[Dict[str, Any]] = None
     ) -> None:
         """
         Log an event to MongoDB.
@@ -131,9 +141,9 @@ class App:
         operation: str,
         user_id: str,
         model: str,
-        cost: float = None,
-        usage: Dict[str, Any] = None,
-        message_id: int = None,
+        cost: Optional[float] = None,
+        usage: Optional[Dict[str, Any]] = None,
+        message_id: Optional[int] = None,
     ) -> None:
         """
         Log cost information to MongoDB.
@@ -167,7 +177,7 @@ class App:
         await self.db.costs.insert_one(cost_data)
 
     async def get_total_cost(
-        self, user_id: str, message_id: int = None
+        self, user_id: str, message_id: Optional[int] = None
     ) -> Dict[str, Any]:
         """
         Get the total cost for a specific user and optionally for a specific message.
@@ -181,7 +191,7 @@ class App:
         """
         query = {"user_id": user_id}
         if message_id is not None:
-            query["message_id"] = message_id
+            query["message_id"] = str(message_id)
 
         costs = await self.db.costs.find(query).to_list(length=1000)
 
@@ -547,7 +557,7 @@ class App:
                     model=model_name,
                     cost=estimated_cost,
                     usage=usage_info,
-                    message_id=getattr(self, "_current_message_id", None),
+                    message_id=self._current_message_id,
                 )
 
             return transcription
@@ -615,7 +625,17 @@ class App:
         Returns:
             List of formatted text chunks
         """
-        logger.info(f"Formatting {len(chunks)} text chunks with LLM")
+        # Check total chunks length against threshold
+        total_length = sum(len(chunk) for chunk in chunks)
+        
+        if total_length > self.config.formatting_disable_threshold:
+            logger.info(
+                f"Skipping formatting: total chunks length ({total_length} chars) "
+                f"exceeds threshold ({self.config.formatting_disable_threshold} chars)"
+            )
+            return chunks
+        
+        logger.info(f"Formatting {len(chunks)} text chunks with LLM (total: {total_length} chars)")
         start_time = time.time()
 
         # Create tasks for all chunks
@@ -671,7 +691,12 @@ class App:
 
             # Cost estimation based on model
             model = self.config.formatting_model
-            if "gpt-4" in model:
+            if "gpt-4.1-nano" in model:
+                # GPT-4.1-nano pricing: $0.0001 per 1K input tokens, $0.0004 per 1K output tokens
+                estimated_cost = (input_tokens * 0.0001 / 1000) + (
+                    output_tokens * 0.0004 / 1000
+                )
+            elif "gpt-4" in model:
                 # GPT-4 pricing: $0.01 per 1K input tokens, $0.03 per 1K output tokens
                 estimated_cost = (input_tokens * 0.01 / 1000) + (
                     output_tokens * 0.03 / 1000
@@ -697,7 +722,7 @@ class App:
                 model=self.config.formatting_model,
                 cost=estimated_cost,
                 usage=usage_info,
-                message_id=getattr(self, "_current_message_id", None),
+                message_id=self._current_message_id,
             )
 
             return formatted_text
@@ -785,7 +810,7 @@ class App:
                 model=self.config.summary_model,
                 cost=estimated_cost,
                 usage=usage_info,
-                message_id=getattr(self, "_current_message_id", None),
+                message_id=self._current_message_id,
             )
 
             return summary
@@ -876,7 +901,7 @@ class App:
                 model=self.config.chat_model,
                 cost=estimated_cost,
                 usage=usage_info,
-                message_id=getattr(self, "_current_message_id", None),
+                message_id=self._current_message_id,
             )
 
             return response
