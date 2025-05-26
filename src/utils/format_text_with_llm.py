@@ -1,5 +1,5 @@
 from typing import Optional
-
+from textwrap import dedent
 from botspot.llm_provider import aquery_llm_text
 
 
@@ -21,21 +21,23 @@ async def format_text_with_llm(
     Returns:
         Formatted text
     """
-    system_prompt = """
-    You're text formatting assistant. Your goal is:
-    - Add rich punctuation - new lines, quotes, dots and commas where appropriate
-    - Break the text into paragraphs using double new lines
-    - Keep the original text word-to-word, with only minor changes where absolutely necessary
-    - Fix grammar and typos only when they significantly impact readability
-    
-    Example:
-    Input: "this isa test. ohh. um.. it should be 1formatted corr ectly. phew"
-    Output: "This is a test. It should be formatted correctly."
-    """
+    system_prompt = dedent(
+        """
+        You're text formatting assistant. Your goal is:
+        - Add rich punctuation - new lines, quotes, dots and commas where appropriate
+        - Break the text into paragraphs using double new lines
+        - Keep the original text word-to-word, with only minor changes where absolutely necessary
+        - Fix grammar and typos only when they significantly impact readability
+        
+        Example:
+        Input: "this isa test. ohh. um.. it should be 1formatted corr ectly. phew"
+        Output: "This is a test. It should be formatted correctly."
+        """
+    )
 
     formatted_text = await aquery_llm_text(
         prompt=text,
-        system_prompt=system_prompt,
+        system_message=system_prompt,
         model=model,
         user=username,
         temperature=temperature,

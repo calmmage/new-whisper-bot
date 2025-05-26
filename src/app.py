@@ -16,8 +16,9 @@ from tenacity import (
     wait_exponential,
 )
 
+from botspot.core.errors import BotspotError
 from src.create_summary import create_summary
-from src.utils.audio_utils import split_audio
+from src.utils.audio_utils import split_audio, Audio
 from src.utils.convert_to_mp3_ffmpeg import convert_to_mp3_ffmpeg
 from src.utils.cut_audio_ffmpeg import cut_audio_ffmpeg
 from src.utils.download_attachment import download_file
@@ -35,10 +36,10 @@ class AppConfig(BaseSettings):
 
     # cutting parameters
     target_part_size: int = 25 * 1024 * 1024  # desired max size in bytes
-    target_chunk_count = 20
-    minimum_chunk_duration = 2 * 60 * 1000  # 2 minutes
-    maximum_chunk_duration = 20 * 60 * 1000  # 20 minutes
-    overlap_duration = 5 * 1000  # # 5 seconds
+    target_chunk_count: int = 20
+    minimum_chunk_duration: int = 2 * 60 * 1000  # 2 minutes
+    maximum_chunk_duration: int = 20 * 60 * 1000  # 20 minutes
+    overlap_duration: int = 5 * 1000  # # 5 seconds
 
     # todo: decide global semaphore or per task type?
     # openai_max_concurrent_connections: int = 50
@@ -68,9 +69,10 @@ class AppConfig(BaseSettings):
         env_file_encoding = "utf-8"
         extra = "ignore"
 
+
 class App:
     name = "New Whisper Bot"
-    
+
     def __init__(self, **kwargs):
         self.config = AppConfig(**kwargs)
         # self.semaphore = asyncio.Semaphore(
@@ -105,14 +107,21 @@ class App:
         Rewrite old code as a comprehensive util!!! with clear explicit params
         │   ├── cut_audio_inplace_ffmpeg (if disk)
         """
-        # in_memory_audio = download_audio_to_memory(message)
+        assert message.from_user is not None
+        username = message.from_user.username
+        if username is None:
+            raise BotspotError(
+                f"User username is None for user {message.from_user.id}.",
+                user_message="Your telegram account must have a @username set to check that you have access to the bot.",
+            )
+
         media_file = await self.download_attachment(message)
 
         parts = await self.prepare_parts(media_file)
 
         chunks = await self.process_parts(parts)
 
-        chunks = await self.format_chunks_with_llm(chunks)
+        chunks = await self.format_chunks_with_llm(chunks, username=username)
 
         result = merge_all_chunks(chunks)
 
@@ -137,15 +146,13 @@ class App:
         )
 
     # region prepare_parts
-    async def prepare_parts(
-        self, media_file: Union[BinaryIO, Path]
-    ) -> List[Union[BinaryIO, Path]]:
+    async def prepare_parts(self, media_file: Union[BinaryIO, Path]) -> List[Audio]:
         if isinstance(media_file, Path):
             # process file on disk - with
             return await self.process_file_on_disk(media_file)
         else:
             # process file in memory - with pydub
-            assert isinstance(media_file, BinaryIO)
+            assert isinstance(media_file, (BinaryIO, BytesIO))
             return [media_file]
 
     async def process_file_on_disk(self, media_file: Path) -> List[Path]:
@@ -181,7 +188,7 @@ class App:
     # endregion prepare_parts
 
     # region process_parts
-    async def process_parts(self, parts: list) -> list:
+    async def process_parts(self, parts: List[Audio]) -> List[str]:
         chunks = []
 
         # this has to be done one by one, do NOT parallelize.
@@ -207,9 +214,7 @@ class App:
 
     async def process_part(
         self,
-        audio: Union[BinaryIO, Path],
-        # period: int = DEFAULT_PERIOD, # - use
-        # buffer: int = DEFAULT_BUFFER,
+        audio: Audio,
     ) -> List[str]:
         """
         find and use the exact flow from old whisper bot?
@@ -222,6 +227,7 @@ class App:
         if isinstance(audio, (str, BytesIO, BinaryIO)):
             logger.debug(f"Loading audio from {audio}")
             audio = AudioSegment.from_file(audio)
+        assert isinstance(audio, AudioSegment)
 
         audio_duration = len(audio)
         period = self._determine_optimal_period(
@@ -280,9 +286,7 @@ class App:
                 options["language"] = language
 
             response = await self.openai_client.audio.transcriptions.create(
-                file=audio_file, model=model_name,
-                response_format="text",
-                **options
+                file=audio_file, model=model_name, response_format="text", **options
             )
 
             # Extract the transcription text
@@ -314,6 +318,8 @@ class App:
         """
         logger.info(f"Transcribing {len(audio_chunks)} audio chunks")
 
+        # todo: track usage and add usage limits for non-friends. - overall, integrate with llm provider component
+
         # Create tasks for all chunks
         # todo: calculate and log average and total time taken to format chunks.
         tasks = [
@@ -331,9 +337,11 @@ class App:
 
     # region format_chunks_with_llm
 
-    async def format_chunks_with_llm(self, chunks: List[str]) -> List[str]:
+    async def format_chunks_with_llm(
+        self, chunks: List[str], username: str
+    ) -> List[str]:
         # Create tasks for all chunks
-        tasks = [self.format_chunk(chunk) for chunk in chunks]
+        tasks = [self.format_chunk(chunk, username=username) for chunk in chunks]
 
         # todo: calculate and log average and total time taken to format chunks.
         # Wait for all tasks to complete
@@ -341,13 +349,12 @@ class App:
 
         return formatted_chunks
 
-    async def format_chunk(self, chunk: str) -> str:
+    async def format_chunk(self, chunk: str, username: str) -> str:
         async with self.format_semaphore:
             # Small delay to be nice to the API
             await asyncio.sleep(0.1)
             return await format_text_with_llm(
-                text=chunk,
-                model=self.config.formatting_model,
+                text=chunk, model=self.config.formatting_model, username=username
             )
 
     # endregion format_chunks_with_llm

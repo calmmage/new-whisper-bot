@@ -3,11 +3,13 @@ from typing import BinaryIO
 from loguru import logger
 from typing import List, Union
 from pydub import AudioSegment
+from pathlib import Path
 
 DEFAULT_PERIOD = 120 * 1000  # 2 minutes
 DEFAULT_BUFFER = 5 * 1000  # 5 seconds
 
-Audio = Union[AudioSegment, BytesIO, BinaryIO, str]
+Audio = Union[AudioSegment, BytesIO, BinaryIO, Path, str]
+
 
 def split_audio(
     audio: Audio, period=DEFAULT_PERIOD, buffer=DEFAULT_BUFFER
@@ -15,7 +17,7 @@ def split_audio(
     if isinstance(audio, (str, BytesIO, BinaryIO)):
         logger.debug(f"Loading audio from {audio}")
         audio = AudioSegment.from_file(audio)
-        
+
     assert isinstance(audio, AudioSegment)
 
     chunks = []
