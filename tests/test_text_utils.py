@@ -95,15 +95,18 @@ class TestMergeTwoChunks:
 
     def test_merge_with_custom_logger(self):
         """Test merging with custom logger."""
-        mock_logger = Mock()
+        from unittest.mock import patch
+        
         chunk1 = "First chunk with overlap"
         chunk2 = "overlap and second chunk"
 
-        result = merge_two_chunks(chunk1, chunk2)
+        # Mock the actual logger being used in the function
+        with patch('src.utils.text_utils.logger') as mock_logger:
+            result = merge_two_chunks(chunk1, chunk2)
 
-        # Verify logger was called
-        assert mock_logger.debug.called
-        assert "overlap" in result
+            # Verify logger was called
+            assert mock_logger.debug.called
+            assert "overlap" in result
 
 
 class TestMergeAllChunks:
@@ -165,13 +168,16 @@ class TestMergeAllChunks:
 
     def test_merge_with_custom_logger(self):
         """Test merging with custom logger."""
-        mock_logger = Mock()
+        from unittest.mock import patch
+        
         chunks = ["First chunk overlap", "overlap second chunk"]
 
-        merge_all_chunks(chunks, logger=mock_logger)
+        # Mock the actual logger being used in the function
+        with patch('src.utils.text_utils.logger') as mock_logger:
+            merge_all_chunks(chunks)
 
-        # Verify logger was used in underlying merge_two_chunks calls
-        assert mock_logger.debug.called
+            # Verify logger was used in underlying merge_two_chunks calls
+            assert mock_logger.debug.called
 
     def test_merge_chunks_with_whitespace(self):
         """Test merging chunks with various whitespace."""
