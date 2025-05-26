@@ -4,7 +4,11 @@ from botspot.llm_provider import aquery_llm_text
 
 
 async def format_text_with_llm(
-    text: str, username: Optional[str] = None, model: str = "gpt-4-1106-preview"
+    text: str,
+    username: Optional[str] = None,
+    model: str = "gpt-4.1-nano",
+    temperature: float = 0.3,
+    max_tokens: int = 4096,
 ) -> str:
     """
     Format text with LLM to improve readability.
@@ -32,10 +36,10 @@ async def format_text_with_llm(
     formatted_text = await aquery_llm_text(
         prompt=text,
         system_prompt=system_prompt,
-        model="gpt-4.1-nano",
+        model=model,
         user=username,
-        temperature=0.3,
-        max_tokens=4096,
+        temperature=temperature,
+        max_tokens=max_tokens,
     )
 
     return formatted_text

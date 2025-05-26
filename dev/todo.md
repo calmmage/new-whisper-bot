@@ -3,7 +3,6 @@
 - [ ] make sure the bot works for other users (and i have control over who) - try botspot friends
 - [ ] make sure the bot works for anonymous users - and I have control over how much. Did I already implemnt this?
 
-- [ ] ]
 - [ ] add explicitly models for transcript, chat, format and summary in app and User config
   - [ ] implement better user settings component - handler etc.1
 

@@ -3,6 +3,7 @@ from typing import List, Optional
 from loguru import logger
 
 from src.utils.text_utils import DEFAULT_BUFFER, DEFAULT_MATCH_CUTOFF, merge_all_chunks
+from src.utils.llm_utils import format_text_with_llm
 
 
 async def merge_transcription_chunks(

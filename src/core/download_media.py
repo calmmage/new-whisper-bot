@@ -117,10 +117,12 @@ async def download_file_from_aiogram_message(
 
     if api_id is None:
         from botspot import get_dependency_manager
+
         deps = get_dependency_manager()
         api_id = deps.botspot_settings.telethon_manager.api_id
     if api_hash is None:
         from botspot import get_dependency_manager
+
         deps = get_dependency_manager()
         assert deps.botspot_settings.telethon_manager.api_hash is not None
         api_hash = deps.botspot_settings.telethon_manager.api_hash.get_secret_value()
@@ -133,7 +135,8 @@ async def download_file_from_aiogram_message(
 
     if use_subprocess:
         return await download_file_via_subprocess(
-            message_id, username,
+            message_id,
+            username,
             api_id=api_id,
             api_hash=api_hash,
             bot_token=bot_token,
@@ -183,7 +186,7 @@ async def download_file_with_pyrogram(
     bot_token: Optional[str] = None,
     check_aiogram: bool = True,
     in_memory: bool = False,
-):
+) -> Union[BinaryIO, Path]:
     # Check for aiogram conflicts
     if check_aiogram and _check_aiogram_running():
         raise RuntimeError(
@@ -210,9 +213,15 @@ async def download_file_with_pyrogram(
         )
 
     file_path = target_dir / file_name
-    await pyrogram_message.download(file_name=str(file_path), in_memory=in_memory)
+    file_path = file_path.absolute()
 
-    return file_path
+    result = await pyrogram_message.download(
+        file_name=str(file_path), in_memory=in_memory
+    )
+    if in_memory:
+        return result
+    else:
+        return file_path
 
 
 async def download_file_via_subprocess(
@@ -224,7 +233,7 @@ async def download_file_via_subprocess(
     target_dir: Optional[Path] = None,
     file_name: Optional[str] = None,
     use_original_file_name: bool = True,
-    in_memory: bool = False
+    in_memory: bool = False,
 ):
     """
     Download file using subprocess to avoid pyrogram/aiogram conflicts.
@@ -251,12 +260,6 @@ async def download_file_via_subprocess(
         "--bot_token",
         bot_token,
     ]
-    if in_memory:
-        cmd.append("--in_memory")
-        if target_dir is not None:
-            logger.warning(
-                f"Passing target dir with in_memory=True does nothing. {target_dir=}"
-            )
 
     if target_dir is not None:
         cmd.extend(["--target_dir", str(target_dir)])
@@ -289,7 +292,11 @@ async def download_file_via_subprocess(
 
     downloaded_file_path = match.group(1).strip()
 
-    return Path(downloaded_file_path)
+    if in_memory:
+        # todo: check if this complies with BytesIO type annotation
+        return open(downloaded_file_path, "rb")
+    else:
+        return Path(downloaded_file_path).absolute()
 
 
 __all__ = [
@@ -315,7 +322,6 @@ if __name__ == "__main__":
     parser.add_argument("--api_id", type=int, required=True)
     parser.add_argument("--api_hash", type=str, required=True)
     parser.add_argument("--bot_token", type=str, required=True)
-    parser.add_argument("--in_memory", action='store_true')
 
     args = parser.parse_args()
 
@@ -330,8 +336,9 @@ if __name__ == "__main__":
             api_hash=args.api_hash,
             bot_token=args.bot_token,
             check_aiogram=False,  # Disable aiogram check in subprocess
-            in_memory=args.in_memory,
         )
     )
+
+    downloaded_file_path = downloaded_file_path.absolute()
 
     print(f"Downloaded file path: {downloaded_file_path}")
