@@ -1,4 +1,4 @@
-# Done!
+
 from pathlib import Path
 from typing import BinaryIO, Optional, Union
 

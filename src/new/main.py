@@ -5,10 +5,10 @@ from pathlib import Path
 from typing import Union, BinaryIO, List
 import asyncio
 
-from src.core.convert_to_mp3 import convert_to_mp3
-from src.new.utils.download_file import download_file
-from src.utils.llm_utils import format_text_with_llm
-from src.utils.text_utils import merge_all_chunks
+from src.new.utils.convert_to_mp3_ffmpeg import convert_to_mp3
+from src.new.utils.download_attachment import download_file
+from src.new.utils.format_text_with_llm import format_text_with_llm
+from src.new.utils.text_utils import merge_all_chunks
 
 
 class AppConfig(BaseSettings):

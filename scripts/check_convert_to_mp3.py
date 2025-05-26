@@ -18,7 +18,7 @@ from loguru import logger
 # Add the src directory to the Python path
 sys.path.append(str(Path(__file__).parent.parent))
 
-from src.core.convert_to_mp3 import convert_to_mp3
+from src.new.utils.convert_to_mp3_ffmpeg import convert_to_mp3
 
 
 async def check_convert_video(

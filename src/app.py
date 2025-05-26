@@ -5,10 +5,10 @@ from typing import List, Optional
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings
 
-from src.core.convert_to_mp3 import convert_to_mp3
-from src.core.create_summary import create_summary
+from src.new.utils.convert_to_mp3_ffmpeg import convert_to_mp3
+from src.new.create_summary import create_summary
 from src.core.cut_audio import cut_audio_into_pieces
-from src.core.download_media import download_file_via_subprocess
+from src.new.utils.download_attachment_pyrogram import download_file_via_subprocess
 from src.core.merge_transcription_chunks import merge_transcription_chunks
 from src.core.parse_audio_chunks import parse_audio_chunks
 

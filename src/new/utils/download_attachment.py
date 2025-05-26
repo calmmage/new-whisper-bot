@@ -3,7 +3,7 @@ from pathlib import Path
 from loguru import logger
 from aiogram.types import Message as AiogramMessage
 
-from src.new.utils.download_file_aiogram import download_file_aiogram
+from src.new.utils.download_attachment_aiogram import download_file_aiogram
 
 
 async def download_file(
@@ -37,7 +37,7 @@ async def download_file(
 
         traceback.print_exc()
 
-        from src.core.download_media import download_file_from_aiogram_message
+        from src.new.utils.download_attachment_pyrogram import download_file_from_aiogram_message
 
         # todo: it makes no sense to use in_memory=True by default here:
         result = await download_file_from_aiogram_message(
