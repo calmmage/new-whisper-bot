@@ -1,7 +1,7 @@
 import asyncio
 from io import BytesIO
 from pathlib import Path
-from typing import BinaryIO, List, Optional, Union
+from typing import BinaryIO, List, Optional, Union, Sequence
 
 import openai
 from aiogram.types import Message as AiogramMessage
@@ -146,7 +146,7 @@ class App:
         )
 
     # region prepare_parts
-    async def prepare_parts(self, media_file: Union[BinaryIO, Path]) -> List[Audio]:
+    async def prepare_parts(self, media_file: Union[BinaryIO, Path]) -> Sequence[Audio]:
         if isinstance(media_file, Path):
             # process file on disk - with
             return await self.process_file_on_disk(media_file)
@@ -188,7 +188,7 @@ class App:
     # endregion prepare_parts
 
     # region process_parts
-    async def process_parts(self, parts: List[Audio]) -> List[str]:
+    async def process_parts(self, parts: Sequence[Audio]) -> List[str]:
         chunks = []
 
         # this has to be done one by one, do NOT parallelize.
