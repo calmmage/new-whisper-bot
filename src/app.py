@@ -119,7 +119,7 @@ class App:
         event = {
             "event_type": event_type,
             "user_id": user_id,
-            "timestamp": datetime.datetime.utcnow(),
+            "timestamp": datetime.datetime.now(),
             **data,
         }
 
@@ -153,15 +153,15 @@ class App:
             "operation": operation,
             "user_id": user_id,
             "model": model,
-            "timestamp": datetime.datetime.utcnow(),
+            "timestamp": datetime.datetime.now(),
             "usage": usage,
         }
 
         if cost is not None:
-            cost_data["cost"] = cost
+            cost_data["cost"] = str(cost)
 
         if message_id is not None:
-            cost_data["message_id"] = message_id
+            cost_data["message_id"] = str(message_id)
 
         logger.info(f"Logging cost for {operation} using {model} for user {user_id}")
         await self.db.costs.insert_one(cost_data)
@@ -483,10 +483,9 @@ class App:
         Parse a single audio chunk using OpenAI Whisper API.
 
         Args:
-            audio_path: Path to the audio file
+            audio_file: in-memory audio file
             model_name: Name of the Whisper model to use (whisper-1)
             language: Language code (optional, auto-detected if None)
-            api_key: OpenAI API key (defaults to OPENAI_API_KEY environment variable)
             username: Username for cost tracking
 
         Returns:
@@ -567,8 +566,6 @@ class App:
             audio_chunks: List of paths to audio files
             model_name: Name of the Whisper model to use (whisper-1)
             language: Language code (optional, auto-detected if None)
-            api_key: OpenAI API key (defaults to OPENAI_API_KEY environment variable)
-            max_concurrent: Maximum number of concurrent transcriptions
             username: Username for cost tracking
 
         Returns:
