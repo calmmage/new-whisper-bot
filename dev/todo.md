@@ -1,5 +1,16 @@
 # Todos
 
+## New architecture grok discussion
+https://grok.com/share/bGVnYWN5_832ecdcb-8083-4ef7-bfbf-9ab8411d8697
+
+## Todos - 26 May
+
+- [ ] make sure the bot works for other users (and i have control over who) - try botspot friends
+- [ ] make sure the bot works for anonymous users - and I have control over how much. Did I already implemnt this?
+
+- [ ] add explicitly models for transcript, chat, format and summary in app and User config
+  - [ ] implement better user settings component - handler etc.1
+
 ## 25 May 2025
 
 - [x] cleanup original file - if not mp3
@@ -100,9 +111,9 @@ Old features / code that I will need
 - [x] download
 - [x] convert to mp3
 - [x] cut audio
-- [ ] transcribe
-- [ ] format and merge
-- [ ] summarize
+- [x] transcribe
+- [x] format and merge
+- [x] summarize
 
 For future, NOT NOW
   - [x] just 'reply to' activates gpt chat mode with that message text as context

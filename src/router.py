@@ -2,11 +2,12 @@ from aiogram import F, Router, html
 from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
-from botspot import commands_menu, reply_safe, answer_safe, get_message_text
+from botspot import answer_safe, commands_menu, get_message_text, reply_safe
 from botspot.components.new.llm_provider import aquery_llm_text
 from botspot.user_interactions import ask_user_choice
 from botspot.utils import send_safe
 
+# from src.old.app import App
 from src.app import App
 
 router = Router()
@@ -15,6 +16,7 @@ router = Router()
 @commands_menu.botspot_command("start", "Start the bot")
 @router.message(CommandStart())
 async def start_handler(message: Message, app: App):
+    assert message.from_user is not None
     await send_safe(
         message.chat.id,
         f"Hello, {html.bold(message.from_user.full_name)}!\n"
@@ -62,12 +64,14 @@ async def main_chat_handler(message: Message, app: App, state: FSMContext):
     )
 
     # Send a processing message
+    # todo: make a nicer message - time estimate - here, and update it along the way.
     notif = await reply_safe(
         message, "🔄 Processing your media file... This may take a few minutes."
     )
 
     # Transcribe the audio
-    transcription = await app.run(message.message_id, username, model=model)
+    # transcription = await app.run(message.message_id, username, model=model)
+    transcription = await app.process_message(message)
     await reply_safe(message, transcription)
     await notif.delete()
 
@@ -94,7 +98,7 @@ async def _reply_chat_handler(message: Message, app: App):
     assert message.reply_to_message is not None
 
     # todo: reconstruct full chat history from reply chain
-    prompt = get_message_text(message, include_reply=True)
+    prompt = await get_message_text(message, include_reply=True)
     response = await aquery_llm_text(prompt=prompt, model=app.config.summary_model)
     await reply_safe(
         message,

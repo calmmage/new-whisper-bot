@@ -2,7 +2,7 @@ import asyncio
 import os
 import re
 from pathlib import Path
-from typing import Optional, Union
+from typing import Optional, Union, BinaryIO
 
 from aiogram.types import Message as AiogramMessage
 from loguru import logger
@@ -94,6 +94,10 @@ async def download_file_from_aiogram_message(
     file_name: Optional[str] = None,
     use_original_file_name: bool = True,
     use_subprocess: bool = False,
+    api_id: Optional[int] = None,
+    api_hash: Optional[str] = None,
+    bot_token: Optional[str] = None,
+    in_memory: bool = False,
 ):
     """
     Download file from aiogram message.
@@ -111,9 +115,35 @@ async def download_file_from_aiogram_message(
     assert message.from_user is not None
     username = message.from_user.username
 
+    if api_id is None:
+        from botspot import get_dependency_manager
+
+        deps = get_dependency_manager()
+        api_id = deps.botspot_settings.telethon_manager.api_id
+    if api_hash is None:
+        from botspot import get_dependency_manager
+
+        deps = get_dependency_manager()
+        assert deps.botspot_settings.telethon_manager.api_hash is not None
+        api_hash = deps.botspot_settings.telethon_manager.api_hash.get_secret_value()
+    if bot_token is None:
+        bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
+
+    assert api_id is not None
+    assert api_hash is not None
+    assert bot_token is not None
+
     if use_subprocess:
         return await download_file_via_subprocess(
-            message_id, username, target_dir, file_name, use_original_file_name
+            message_id,
+            username,
+            api_id=api_id,
+            api_hash=api_hash,
+            bot_token=bot_token,
+            target_dir=target_dir,
+            file_name=file_name,
+            use_original_file_name=use_original_file_name,
+            in_memory=in_memory,
         )
     else:
         return await download_file_with_pyrogram(
@@ -155,7 +185,8 @@ async def download_file_with_pyrogram(
     api_hash: Optional[str] = None,
     bot_token: Optional[str] = None,
     check_aiogram: bool = True,
-):
+    in_memory: bool = False,
+) -> Union[BinaryIO, Path]:
     # Check for aiogram conflicts
     if check_aiogram and _check_aiogram_running():
         raise RuntimeError(
@@ -173,18 +204,24 @@ async def download_file_with_pyrogram(
     assert not isinstance(pyrogram_message, list)
 
     if target_dir is None:
-        target_dir = Path("../utils")
+        target_dir = Path("../../utils")
 
-    # todo: figure out the file name - get from attachment or smth?
     if file_name is None:
         file_name = extract_file_name_from_pyrogram_message(
             pyrogram_message, use_original_file_name
         )
 
     file_path = target_dir / file_name
-    await pyrogram_message.download(file_name=str(file_path))
+    file_path = file_path.absolute()
 
-    return file_path
+    result = await pyrogram_message.download(
+        file_name=str(file_path), in_memory=in_memory
+    )
+    if in_memory:
+        assert isinstance(result, BinaryIO)
+        return result
+    else:
+        return file_path
 
 
 async def download_file_via_subprocess(
@@ -196,6 +233,7 @@ async def download_file_via_subprocess(
     target_dir: Optional[Path] = None,
     file_name: Optional[str] = None,
     use_original_file_name: bool = True,
+    in_memory: bool = False,
 ):
     """
     Download file using subprocess to avoid pyrogram/aiogram conflicts.
@@ -254,7 +292,11 @@ async def download_file_via_subprocess(
 
     downloaded_file_path = match.group(1).strip()
 
-    return Path(downloaded_file_path)
+    if in_memory:
+        # todo: check if this complies with BytesIO type annotation
+        return open(downloaded_file_path, "rb")
+    else:
+        return Path(downloaded_file_path).absolute()
 
 
 __all__ = [
@@ -294,7 +336,10 @@ if __name__ == "__main__":
             api_hash=args.api_hash,
             bot_token=args.bot_token,
             check_aiogram=False,  # Disable aiogram check in subprocess
+            in_memory=False
         )
     )
+    assert isinstance(downloaded_file_path, Path)
+    downloaded_file_path = downloaded_file_path.absolute()
 
     print(f"Downloaded file path: {downloaded_file_path}")

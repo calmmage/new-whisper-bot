@@ -4,13 +4,12 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from botspot.core.bot_manager import BotManager
-from calmlib.utils import heartbeat_for_sync, setup_logger
+from calmlib.utils import setup_logger
 from dotenv import load_dotenv
 from loguru import logger
 
 from src.app import App
 from src.router import router as main_router
-from src.routers.settings import router as settings_router
 
 
 # @heartbeat_for_sync(App.name)
@@ -20,7 +19,6 @@ def main(debug=False) -> None:
     # Initialize bot and dispatcher
     dp = Dispatcher()
     dp.include_router(main_router)
-    dp.include_router(settings_router)
 
     app = App()
     dp["app"] = app

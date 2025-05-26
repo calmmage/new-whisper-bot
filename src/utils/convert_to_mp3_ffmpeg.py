@@ -7,7 +7,7 @@ import psutil
 from loguru import logger
 
 
-async def convert_to_mp3(
+async def convert_to_mp3_ffmpeg(
     source_path: Path,
     output_path: Optional[Path] = None,
     format: str = "mp3",
@@ -42,19 +42,19 @@ async def convert_to_mp3(
 
     # Choose the appropriate implementation based on the flag
     if use_memory_profiler:
-        return await convert_to_mp3_with_profiler(source_path, output_path, format)
+        return await _convert_to_mp3_with_profiler(source_path, output_path, format)
     else:
-        return await convert_to_mp3_standard(source_path, output_path, format)
+        return await _convert_to_mp3_standard(source_path, output_path, format)
 
 
-async def convert_to_mp3_standard(
-    video_path: Path, output_path: Path, format: str = "mp3"
+async def _convert_to_mp3_standard(
+    source_path: Path, output_path: Path, format: str = "mp3"
 ) -> Path:
     """
     Standard implementation of video to audio conversion using ffmpeg.
 
     Args:
-        video_path: Path to the video file
+        source_path: Path to the video file
         output_path: Path to save the audio file
         format: Audio format (default: mp3)
 
@@ -63,14 +63,14 @@ async def convert_to_mp3_standard(
     """
     try:
         logger.info(
-            f"Converting {video_path} to {output_path} (standard implementation)"
+            f"Converting {source_path} to {output_path} (standard implementation)"
         )
 
         # Build the ffmpeg command
         cmd = [
             "ffmpeg",
             "-i",
-            str(video_path),  # Input file
+            str(source_path),  # Input file
             "-vn",  # Disable video
             "-acodec",
             "libmp3lame" if format == "mp3" else format,  # Audio codec
@@ -90,7 +90,7 @@ async def convert_to_mp3_standard(
             error_msg = stderr.decode() if stderr else "Unknown error"
             raise RuntimeError(f"FFmpeg conversion failed: {error_msg}")
 
-        logger.info(f"Successfully converted {video_path} to {output_path}")
+        logger.info(f"Successfully converted {source_path} to {output_path}")
         return output_path
 
     except Exception as e:
@@ -98,14 +98,14 @@ async def convert_to_mp3_standard(
         raise
 
 
-async def convert_to_mp3_with_profiler(
-    video_path: Path, output_path: Path, format: str = "mp3"
+async def _convert_to_mp3_with_profiler(
+    source_path: Path, output_path: Path, format: str = "mp3"
 ) -> Path:
     """
     Memory-profiled implementation of video to audio conversion using ffmpeg.
 
     Args:
-        video_path: Path to the video file
+        source_path: Path to the video file
         output_path: Path to save the audio file
         format: Audio format (default: mp3)
 
@@ -113,13 +113,13 @@ async def convert_to_mp3_with_profiler(
         Path to the converted audio file
     """
     try:
-        logger.info(f"Converting {video_path} to {output_path} (with memory profiler)")
+        logger.info(f"Converting {source_path} to {output_path} (with memory profiler)")
 
         # Build the ffmpeg command
         cmd = [
             "ffmpeg",
             "-i",
-            str(video_path),  # Input file
+            str(source_path),  # Input file
             "-vn",  # Disable video
             "-acodec",
             "libmp3lame" if format == "mp3" else format,  # Audio codec
@@ -190,7 +190,7 @@ async def convert_to_mp3_with_profiler(
                 f"Memory usage statistics: Peak={peak_memory:.2f}MB, Average={avg_memory:.2f}MB"
             )
 
-        logger.info(f"Successfully converted {video_path} to {output_path}")
+        logger.info(f"Successfully converted {source_path} to {output_path}")
         return output_path
 
     except Exception as e:

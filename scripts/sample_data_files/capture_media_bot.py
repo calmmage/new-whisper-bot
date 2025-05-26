@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 from loguru import logger
 
 # Import our pyrogram download utility
-from src.core.download_media import (
+from src.utils.download_attachment_pyrogram import (
     _check_aiogram_running,
     download_file_via_subprocess,
 )

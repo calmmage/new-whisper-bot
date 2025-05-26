@@ -18,7 +18,7 @@ from loguru import logger
 # Add the src directory to the Python path
 sys.path.append(str(Path(__file__).parent.parent))
 
-from src.core.convert_to_mp3 import convert_to_mp3
+from src.utils import convert_to_mp3_ffmpeg
 
 
 async def check_convert_video(
@@ -48,7 +48,7 @@ async def check_convert_video(
     # Convert the video to audio
     try:
         start_time = asyncio.get_event_loop().time()
-        audio_path = await convert_to_mp3(
+        audio_path = await convert_to_mp3_ffmpeg(
             source_path=video_path,
             output_path=output_path,
             format="mp3",

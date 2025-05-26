@@ -3,7 +3,8 @@ import pickle
 from pathlib import Path
 
 from dotenv import load_dotenv
-from pyrogram import Client, filters
+from pyrogram import filters
+from pyrogram.client import Client
 
 load_dotenv()
 API_ID = int(os.getenv("TELEGRAM_API_ID"))
