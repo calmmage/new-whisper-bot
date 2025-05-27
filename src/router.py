@@ -1,11 +1,12 @@
-from aiogram import F, Router, html
-from aiogram.filters import CommandStart
+from aiogram import F, Router
+from aiogram.filters import CommandStart, Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 from botspot import answer_safe, commands_menu, get_message_text, reply_safe
 from botspot.user_interactions import ask_user_choice
-from botspot.utils import send_safe
+from botspot.utils import send_safe, markdown_to_html
 from loguru import logger
+from textwrap import dedent
 
 from src.app import App
 
@@ -63,9 +64,8 @@ async def media_handler(message: Message, app: App, state: FSMContext):
     )
 
     # Send a processing message
-    # todo: make a nicer message - time estimate - here, and update it along the way.
     notif = await reply_safe(
-        message, "Processing your media file... This may take a few minutes."
+        message, "Processing your media file. Estimating transcription time..."
     )
 
     # Transcribe the audio
@@ -83,7 +83,6 @@ async def media_handler(message: Message, app: App, state: FSMContext):
         notif = await reply_safe(
             message, "Large transcript detected, creating summary..."
         )
-
         summary = await app.create_summary(
             transcription, username=username, message_id=message.message_id
         )
@@ -152,37 +151,20 @@ async def _reply_chat_handler(message: Message, app: App):
     # todo: reconstruct full chat history from reply chain
     prompt = await get_message_text(message, include_reply=True)
 
-    # Get cost before chat operation
-    # todo: rework to use message_id instead of total cost
-    before_cost = await app.get_total_cost(username)
-
-    # Set message_id for this user
-    app._user_message_ids[username] = message.message_id
-
     # Process chat request
-    response = await app.chat_about_transcript(full_prompt=prompt, username=username)
+    response = await app.chat_about_transcript(full_prompt=prompt, username=username, message_id=message.message_id)
+    response = markdown_to_html(response)
 
-    # Clear message_id for this user
-    app._user_message_ids.pop(username, None)
+    cost = await app.get_total_cost(username, message_id=message.message_id)
+    chat_cost = cost["total_cost"]
+    if chat_cost > 0.01:
+        response += f"\n<i>cost: ${chat_cost:.4f} USD</i>"
 
     # Send response to user
     await reply_safe(
         message,
         response,
-        # parse_mode="HTML",
     )
-
-    # Get cost after chat operation
-    after_cost = await app.get_total_cost(username)
-
-    # Calculate cost of this operation
-    chat_cost = after_cost["total_cost"] - before_cost["total_cost"]
-
-    # Only show cost if it's significant
-    if chat_cost > 0.01:
-        # todo: include in message response at the bottom, as italic
-        cost_message = f"💬 <b>Chat Cost:</b> ${chat_cost:.4f} USD"
-        await reply_safe(message, cost_message)
 
     logger.info(f"Completed chat request for user {username}, cost: ${chat_cost:.4f}")
 
@@ -193,5 +175,5 @@ async def _basic_chat_handler(message: Message, app: App):
         message,
         "This is a Whisper bot. "
         "\n\nSend an Audio, Video, Voice or Video Note message to transcribe and summarize it.",
-        "\n\nReply to a text message from bot to chat about its transcript or summary with LLM",
+        "\n\n<b>Reply</b> to a text message from bot to chat about its transcript or summary with LLM",
     )

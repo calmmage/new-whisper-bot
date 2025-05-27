@@ -80,7 +80,8 @@ class AppConfig(BaseSettings):
     summary_generation_threshold: int = 4000
     # todo: allow user to configure
     chat_model: str = (
-        "claude-4-sonnet"  # Default chat model for discussing transcripts and summaries
+        # "claude-4-sonnet"  # Default chat model for discussing transcripts and summaries
+        "grok-3"
     )
     chat_max_tokens: int = 2048
     # todo: allow user to configure
@@ -574,12 +575,8 @@ class App:
         status_callback: Optional[Callable[[str], Awaitable[None]]] = None,
     ) -> Sequence[Audio]:
         if isinstance(media_file, Path):
-            if status_callback is not None:
-                await status_callback(
-                    "Preparing audio - converting to mp3 and cutting into manageable parts..."
-                )
             # process file on disk - with
-            parts = await self.process_file_on_disk(media_file)
+            parts = await self.process_file_on_disk(media_file, status_callback=status_callback)
             if self.config.cleanup_downloads:
                 if media_file != parts[0]:
                     media_file.unlink(missing_ok=True)
@@ -587,21 +584,29 @@ class App:
         else:
             # process file in memory - with pydub
             assert isinstance(media_file, (BinaryIO, BytesIO))
+            if status_callback is not None:
+                await status_callback(
+                    "Just one part to process\n<b>Estimated processing time: Should be up to 1 minute</b>"
+                )
             return [media_file]
 
-    async def process_file_on_disk(self, media_file: Path) -> List[Path]:
+    async def process_file_on_disk(self, media_file: Path, status_callback: Optional[Callable[[str], Awaitable[None]]] = None) -> Sequence[Audio]:
         if media_file.suffix != ".mp3":
+            if status_callback is not None:
+                await status_callback(
+                    "Preparing audio - converting to mp3.."
+                )
             mp3_file = await convert_to_mp3_ffmpeg(media_file)
             # delete original file
             if self.config.cleanup_downloads:
                 media_file.unlink(missing_ok=True)
             media_file = mp3_file
 
-        parts = await self.cut_audio_with_ffmpeg(media_file)
+        parts = await self.cut_audio_with_ffmpeg(media_file, status_callback=status_callback)
 
         return parts
 
-    async def cut_audio_with_ffmpeg(self, media_file):
+    async def cut_audio_with_ffmpeg(self, media_file, status_callback: Optional[Callable[[str], Awaitable[None]]] = None) -> Sequence[Audio]:
         file_size = self._get_file_size(media_file)
         num_parts = int(file_size / self.config.target_part_size) + 1
 
@@ -609,11 +614,17 @@ class App:
             f"Cutting file sized {file_size / (1024 * 1024):.2f} MB into {num_parts} parts - target size {self.config.target_part_size / (1024 * 1024):.2f} MB"
         )
         if num_parts > 1:
+            if status_callback is not None:
+                await status_callback("Preparing audio - cutting into parts..\n<b>Estimated processing time: Several minutes</b>")
             parts = await cut_audio_ffmpeg(media_file, num_parts=num_parts)
             if self.config.cleanup_downloads:
                 media_file.unlink(missing_ok=True)
             return parts
         else:
+            if status_callback is not None:
+                await status_callback(
+                    "Just one part to process\n<b>Estimated processing time: Should be about 1-2 minutes</b>"
+                )
             return [media_file]
 
     @staticmethod
@@ -1052,7 +1063,7 @@ class App:
             return summary
 
     async def chat_about_transcript(
-        self, full_prompt: str, username: str, model: str = None
+        self, full_prompt: str, username: str, model: str = None, message_id: Optional[int] = None
     ) -> str:
         """
         Chat about the transcript using the configured chat model.
@@ -1109,13 +1120,11 @@ class App:
                 operation="chat",
                 username=username,
                 model=self.config.chat_model,
+                message_id=message_id,
                 input_data=full_prompt,
                 output_data=response,
                 processing_time=processing_time,
-                write_to_db=False,
+                write_to_db=True,
             )
-
-            # Write accumulated chat costs to the database
-            await self.write_accumulated_costs(username, operation_type="chat")
 
             return response
