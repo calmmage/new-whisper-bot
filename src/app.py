@@ -46,8 +46,10 @@ class AppConfig(BaseSettings):
     use_original_file_name: bool = False
 
     # cutting parameters
-    target_part_size: int = 25 * 1024 * 1024  # desired max size in bytes
-    target_chunk_count: int = 20
+    target_part_size: int = (
+        50 * 1024 * 1024
+    )  # 25 * 1024 * 1024  # desired max size in bytes
+    target_chunk_count: int = 10  # 20
     minimum_chunk_duration: int = 2 * 60 * 1000  # 2 minutes
     maximum_chunk_duration: int = 20 * 60 * 1000  # 20 minutes
     overlap_duration: int = 5 * 1000  # # 5 seconds
