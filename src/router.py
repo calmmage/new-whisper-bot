@@ -1,9 +1,11 @@
+from pydantic import BaseModel
 from aiogram import F, Router
 from aiogram.filters import CommandStart, Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 from botspot import answer_safe, commands_menu, get_message_text, reply_safe
-from botspot.user_interactions import ask_user_choice
+from botspot.components.new.llm_provider import aquery_llm_structured
+from botspot.user_interactions import ask_user_choice, ask_user
 from botspot.utils import send_safe, markdown_to_html
 from loguru import logger
 from textwrap import dedent
@@ -66,6 +68,8 @@ async def help_handler(message: Message, app: App):
         help_message
     )
 
+class Language(BaseModel):
+    language_code: str
 
 @router.message(F.audio | F.voice | F.video | F.document | F.video_note)
 async def media_handler(message: Message, app: App, state: FSMContext):
@@ -85,21 +89,22 @@ async def media_handler(message: Message, app: App, state: FSMContext):
         },
         state=state,
         timeout=10,  # 10 seconds to choose, then default to whisper-1
-        cleanup=True,
+        cleanup=app.config.cleanup_messages,
         default_choice=app.config.transcription_model,
     )
+
+    language_code = await ask_user_language(message)
 
     # Send a processing message
     notif = await reply_safe(
         message, "Processing your media file. Estimating transcription time..."
     )
-
-    # todo: ask which language
-
+    
     # Transcribe the audio
     transcription = await app.process_message(
         message,
         whisper_model=model,
+        language=language_code,
         status_callback=create_notification_callback(notif),
     )
     await reply_safe(message, transcription)
@@ -145,15 +150,56 @@ async def media_handler(message: Message, app: App, state: FSMContext):
 
 def create_notification_callback(notification_message: Message):
     text = notification_message.text
-    assert text is not None
-
+    
     async def callback(update_text: str):
         nonlocal text
+        assert text is not None
         text = text + "\n" + update_text
-        return await notification_message.edit_text(text)
+        await notification_message.edit_text(text)
 
     return callback
 
+async def ask_user_language(message: Message, app: App, state: FSMContext):
+    assert message.from_user is not None
+    username = message.from_user.username
+    language = await ask_user_choice(
+        message.chat.id,
+        "Please choose a language for transcription:",
+        {
+            "auto": "Auto-detect",
+            "en": "English",
+            "ru": "Russian",
+            "other": "Other (enter manually)",
+        },
+        state=state,
+        default_choice="auto",
+        timeout=10,
+        cleanup=app.config.cleanup_messages,
+    )
+    if language == "auto":
+        language_code = None
+    elif language == "other":
+        language_str = await ask_user(
+            message.chat.id,
+            "Please enter the language manually:",
+            state=state,
+            cleanup=app.config.cleanup_messages,
+        )
+        # use simple llm query to
+        if language_str is None:
+            await message.reply("No language provided, please retry.")
+            return
+        parsed_language: Language = await aquery_llm_structured(
+            prompt = language_str,
+            output_schema=Language,
+            model="gpt-4o-mini",
+            system_message="You are a language detection assistant. Your goal is to return the language code in ISO 639-1 format (e.g., 'en' for English, 'ru' for Russian).",
+            user=username,
+        )
+        language_code = parsed_language.language_code
+    else:
+        language_code = language
+    return language_code
 
 @router.message()
 async def chat_handler(message: Message, app: App):

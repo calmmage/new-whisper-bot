@@ -50,8 +50,9 @@ class AppConfig(BaseSettings):
     telegram_bot_token: SecretStr
 
     downloads_dir: Path = Path("downloads").absolute()
-    # todo: make sure that if there's only a single file - we reuse it and not delete it
     cleanup_downloads: bool = True
+    # todo: allow user to configure
+    cleanup_messages: bool = False  # delete messages after processing
     use_original_file_name: bool = False
 
     # cutting parameters
@@ -457,6 +458,7 @@ class App:
         self,
         message: AiogramMessage,
         whisper_model: Optional[str] = None,
+        language: Optional[str] = None,
         status_callback: Optional[Callable[[str], Awaitable[None]]] = None,
     ) -> str:
         """
@@ -508,6 +510,7 @@ class App:
             parts,
             username=username,
             whisper_model=whisper_model,
+            language=language,
             status_callback=status_callback,
         )
 
@@ -639,6 +642,7 @@ class App:
         parts: Sequence[Audio],
         username: Optional[str] = None,
         whisper_model: Optional[str] = None,
+        language: Optional[str] = None,
         status_callback: Optional[Callable[[str], Awaitable[None]]] = None,
     ) -> List[str]:
         """
@@ -664,7 +668,7 @@ class App:
             logger.info(f"Processing part {i + 1}/{len(parts)}")
             # todo: make sure memory is freed after each part.
             chunks += await self.process_part(
-                part, username=username, whisper_model=whisper_model
+                part, username=username, whisper_model=whisper_model, language=language
             )
             if status_callback is not None:
                 await status_callback(f"Part {i + 1}/{len(parts)} done")
@@ -702,6 +706,7 @@ class App:
         audio: Audio,
         username: Optional[str] = None,
         whisper_model: Optional[str] = None,
+        language: Optional[str] = None,
     ) -> List[str]:
         """
         Process an audio part by splitting it into chunks and transcribing them.
@@ -748,6 +753,7 @@ class App:
             audio_chunks,
             username=username,
             model_name=whisper_model or self.config.transcription_model,
+            language=language,
         )
 
         return transcriptions
