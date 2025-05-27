@@ -16,41 +16,45 @@ MODEL_PRICING: Dict[str, ModelPricing] = {
     # Anthropic Models
     "claude-3.5-haiku": ModelPricing(input_price_per_1m=0.80, output_price_per_1m=4.00),
     "claude-3-5-haiku": ModelPricing(input_price_per_1m=0.80, output_price_per_1m=4.00),
-    "claude-3.5-sonnet": ModelPricing(input_price_per_1m=3.00, output_price_per_1m=15.00),
-    "claude-3-5-sonnet": ModelPricing(input_price_per_1m=3.00, output_price_per_1m=15.00),
+    "claude-3.5-sonnet": ModelPricing(
+        input_price_per_1m=3.00, output_price_per_1m=15.00
+    ),
+    "claude-3-5-sonnet": ModelPricing(
+        input_price_per_1m=3.00, output_price_per_1m=15.00
+    ),
     "claude-3.7": ModelPricing(input_price_per_1m=3.00, output_price_per_1m=15.00),
     "claude-4": ModelPricing(input_price_per_1m=3.00, output_price_per_1m=15.00),
     "claude-4-sonnet": ModelPricing(input_price_per_1m=3.00, output_price_per_1m=15.00),
-
     # OpenAI Models - Cheap
     "gpt-4o-mini": ModelPricing(input_price_per_1m=0.15, output_price_per_1m=0.60),
     "o4-mini": ModelPricing(input_price_per_1m=0.55, output_price_per_1m=2.20),
+    "gpt-4.1-mini": ModelPricing(input_price_per_1m=0.40, output_price_per_1m=1.60),
     "gpt-4.1-nano": ModelPricing(input_price_per_1m=0.10, output_price_per_1m=0.40),
-
     # OpenAI Models - Mid
     "gpt-4o": ModelPricing(input_price_per_1m=2.50, output_price_per_1m=10.00),
-    "gpt-4.1": ModelPricing(input_price_per_1m=5.00, output_price_per_1m=15.00),
-
+    "gpt-4.1": ModelPricing(input_price_per_1m=2.00, output_price_per_1m=8.00),
     # OpenAI Models - Max
     "o3": ModelPricing(input_price_per_1m=10.00, output_price_per_1m=40.00),
     "gpt-4": ModelPricing(input_price_per_1m=30.00, output_price_per_1m=60.00),
     "o1-pro": ModelPricing(input_price_per_1m=20.00, output_price_per_1m=80.00),
-
     # Google Models
     "gemini-2.5-flash": ModelPricing(input_price_per_1m=0.15, output_price_per_1m=0.60),
     "gemini-2.5-pro": ModelPricing(input_price_per_1m=1.25, output_price_per_1m=10.00),
-
     # xAI Models
-    "grok-3-mini": ModelPricing(input_price_per_1m=1.00, output_price_per_1m=5.00),  # Estimated
-    "grok-3": ModelPricing(input_price_per_1m=5.00, output_price_per_1m=15.00),  # Estimated
-
+    "grok-3-mini": ModelPricing(
+        input_price_per_1m=1.00, output_price_per_1m=5.00
+    ),  # Estimated
+    "grok-3": ModelPricing(
+        input_price_per_1m=5.00, output_price_per_1m=15.00
+    ),  # Estimated
     # Legacy models for backward compatibility
     "gpt-3.5-turbo": ModelPricing(input_price_per_1m=1.50, output_price_per_1m=2.00),
     "claude-3-sonnet": ModelPricing(input_price_per_1m=8.00, output_price_per_1m=24.00),
     "claude-3-haiku": ModelPricing(input_price_per_1m=0.25, output_price_per_1m=1.25),
-
     # Whisper models (pricing per minute, stored as cost per minute * 1000 for consistency)
-    "whisper-1": ModelPricing(input_price_per_1m=6.00, output_price_per_1m=0.0),  # $0.006 per minute
+    "whisper-1": ModelPricing(
+        input_price_per_1m=6.00, output_price_per_1m=0.0
+    ),  # $0.006 per minute
 }
 
 

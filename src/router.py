@@ -93,7 +93,7 @@ async def media_handler(message: Message, app: App, state: FSMContext):
         default_choice=app.config.transcription_model,
     )
 
-    language_code = await ask_user_language(message)
+    language_code = await ask_user_language(message, app, state)
 
     # Send a processing message
     notif = await reply_safe(
@@ -192,11 +192,12 @@ async def ask_user_language(message: Message, app: App, state: FSMContext):
         parsed_language: Language = await aquery_llm_structured(
             prompt = language_str,
             output_schema=Language,
-            model="gpt-4o-mini",
+            model="gpt-4.1-nano",
             system_message="You are a language detection assistant. Your goal is to return the language code in ISO 639-1 format (e.g., 'en' for English, 'ru' for Russian).",
             user=username,
         )
         language_code = parsed_language.language_code
+        logger.info(f"User input: {language_str}, detected language code: {language_code}")
     else:
         language_code = language
     return language_code

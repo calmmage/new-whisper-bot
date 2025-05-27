@@ -82,7 +82,8 @@ class AppConfig(BaseSettings):
     # todo: allow user to configure
     chat_model: str = (
         # "claude-4-sonnet"  # Default chat model for discussing transcripts and summaries
-        "grok-3"
+        "gpt-4.1"  # I got free quote on this one
+        # "grok-3" # I had free quota before but not anymore..
     )
     chat_max_tokens: int = 2048
     # todo: allow user to configure
