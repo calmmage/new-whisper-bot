@@ -77,8 +77,9 @@ async def media_handler(message: Message, app: App, state: FSMContext):
 
     if len(transcription) > app.config.summary_generation_threshold:
         # Create and send summary
-        notif = await reply_safe(message, "🔄 Large transcript detected, Creating summary...")
-
+        notif = await reply_safe(
+            message, "Large transcript detected, creating summary..."
+        )
 
         summary = await app.create_summary(transcription, username=username, message_id=message.message_id)
 
@@ -139,6 +140,7 @@ async def _reply_chat_handler(message: Message, app: App):
     prompt = await get_message_text(message, include_reply=True)
 
     # Get cost before chat operation
+    # todo: rework to use message_id instead of total cost
     before_cost = await app.get_total_cost(username)
 
     # Set message_id for this user
@@ -165,6 +167,7 @@ async def _reply_chat_handler(message: Message, app: App):
 
     # Only show cost if it's significant
     if chat_cost > 0.01:
+        # todo: include in message response at the bottom, as italic
         cost_message = f"💬 <b>Chat Cost:</b> ${chat_cost:.4f} USD"
         await reply_safe(message, cost_message)
 
