@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "new-whisper-bot"
-version = "0.2.6"
+version = "0.2.7"
 description = ""
 authors = ["Petr Lavrov <calmmage@gmail.com>"]
 readme = "README.md"

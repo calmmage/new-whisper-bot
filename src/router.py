@@ -17,28 +17,54 @@ router = Router()
 @router.message(CommandStart())
 async def start_handler(message: Message, app: App):
     assert message.from_user is not None
+    welcome_message = dedent(
+        f"""
+        Hello! This is {app.name}!
+        Send me an audio, video, voice, or document file to transcribe and summarize it.
+        You can also <b>reply</b> to any text message from me to chat about its transcript or summary with LLM.
+        """
+    )
     await send_safe(
         message.chat.id,
-        f"Hello, {html.bold(message.from_user.full_name)}!\n"
-        f"Welcome to {app.name}!\n"
-        f"Use /help to see available commands.",
+        welcome_message
     )
 
 
-# @commands_menu.botspot_command("help", "Show this help message")
-# @router.message(Command("help"))
-# async def help_handler(message: Message, app: App):
-#     """Basic help command handler"""
-#     await send_safe(
-#         message.chat.id,
-#         f"This is {app.name}. Use /start to begin."
-#         "Available commands:\n"
-#         "/start - Start the bot\n"
-#         "/help - Show this help message\n"
-#         "/help_botspot - Show Botspot help\n"
-#         "/timezone - Set your timezone\n"
-#         "/error_test - Test error handling",
-#     )
+@commands_menu.botspot_command("help", "Show this help message")
+@router.message(Command("help"))
+async def help_handler(message: Message, app: App):
+    """Basic help command handler"""
+    # todo: add language picker note
+    help_message = dedent(
+        f"""
+        This is {app.name}!
+        Send me an audio, video, voice, or document file to transcribe and summarize it.
+        You can also <b>reply</b> to any text message from me to chat about its transcript or summary with LLM.
+        
+        You will be prompted to choose a model for transcription. There are three options:
+        - <a href="https://platform.openai.com/docs/models/whisper-1">Whisper</a>: Oldest, well tested, fast
+        - <a href="https://platform.openai.com/docs/models/gpt-4o-mini-transcribe">GPT-4o Mini</a>: Fast, new, sometimes confuses languages.
+        - <a href="https://platform.openai.com/docs/models/gpt-4o-transcribe">GPT-4o</a>: Best, Slowest, most expensive
+        
+        Under the hood, the bot operates as follows:
+        1. Download a media file
+        2. Convert to mp3 and cut to smaller parts if necessary
+        3. Load into memory and cut further into smaller chunks
+        4. Tracnscribe using OpenAI api (whisper or GPT-4o-transcribe models)
+        5. Format punctuation and capitalisation using gpt-4.1-nano.
+        6. For larger transcripts, generate a summary using claude
+        
+        If the summary is bad, or you want to ask other questions using the transcript, you can reply to bot messages. The message you replied to (only that 1 message) will be added to context. Technically, this means that you can use this bot as a chatgpt (claude-4) proxy!
+        
+        You can find the source code <a href="https://github.com/calmmage/new-whisper-bot">here</a>
+        Be aware that the bot uses my custom aiogram library <a href="https://github.com/calmmage/botspot">botspot</a> quite heavily
+        So you might need to explore that as well to understand it. Basic template is available <a href="https://github.com/calmmage/botspot-template">here</a>
+        """
+    )
+    await send_safe(
+        message.chat.id,
+        help_message
+    )
 
 
 @router.message(F.audio | F.voice | F.video | F.document | F.video_note)
@@ -68,8 +94,9 @@ async def media_handler(message: Message, app: App, state: FSMContext):
         message, "Processing your media file. Estimating transcription time..."
     )
 
+    # todo: ask which language
+
     # Transcribe the audio
-    # Note: process_message already sets and clears per-user message_id internally
     transcription = await app.process_message(
         message,
         whisper_model=model,
@@ -86,9 +113,7 @@ async def media_handler(message: Message, app: App, state: FSMContext):
         summary = await app.create_summary(
             transcription, username=username, message_id=message.message_id
         )
-
-        # Clear message_id for this user
-        app._user_message_ids.pop(username, None)
+        summary = markdown_to_html(summary)
 
         await reply_safe(
             message,
