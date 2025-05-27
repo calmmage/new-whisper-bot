@@ -7,7 +7,6 @@ from botspot.user_interactions import ask_user_choice
 from botspot.utils import send_safe
 from loguru import logger
 
-# from src.old.app import App
 from src.app import App
 
 router = Router()
@@ -53,8 +52,8 @@ async def media_handler(message: Message, app: App, state: FSMContext):
         message.chat.id,
         "Please choose a model to use for transcription:",
         {
-            "whisper-1": "Whisper 1 (Oldest, tested)",
-            "gpt-4o-mini-transcribe": "GPT-4o Mini (?)",
+            "whisper-1": "Whisper 1 (Oldest, well tested, fast)",
+            "gpt-4o-mini-transcribe": "GPT-4o Mini (Fast, new, not tested)",
             "gpt-4o-transcribe": "GPT-4o (Best, Slowest, most expensive)",
         },
         state=state,
@@ -66,13 +65,17 @@ async def media_handler(message: Message, app: App, state: FSMContext):
     # Send a processing message
     # todo: make a nicer message - time estimate - here, and update it along the way.
     notif = await reply_safe(
-        message, "🔄 Processing your media file... This may take a few minutes."
+        message, "Processing your media file... This may take a few minutes."
     )
 
     # Transcribe the audio
     # Note: process_message already sets and clears per-user message_id internally
-    transcription = await app.process_message(message, whisper_model=model)
-    await reply_safe(message, transcription, caption="Reminder: you can reply to any message to chat about the transcript or summary with LLM.")
+    transcription = await app.process_message(
+        message,
+        whisper_model=model,
+        status_callback=create_notification_callback(notif),
+    )
+    await reply_safe(message, transcription)
     await notif.delete()
 
     if len(transcription) > app.config.summary_generation_threshold:
@@ -81,12 +84,17 @@ async def media_handler(message: Message, app: App, state: FSMContext):
             message, "Large transcript detected, creating summary..."
         )
 
-        summary = await app.create_summary(transcription, username=username, message_id=message.message_id)
+        summary = await app.create_summary(
+            transcription, username=username, message_id=message.message_id
+        )
 
         # Clear message_id for this user
         app._user_message_ids.pop(username, None)
 
-        await reply_safe(message, f"📋 <b>Summary:</b>\n\n{summary}")
+        await reply_safe(
+            message,
+            f"<b>AI Summary:</b>\n\n{summary}. \n\n <i>Reminder: you can reply to any message to chat about the transcript or summary with LLM.</i>",
+        )
         await notif.delete()
 
     # Get and display cost information
@@ -96,7 +104,10 @@ async def media_handler(message: Message, app: App, state: FSMContext):
         operation_costs = float(cost_info["operation_costs"])
 
         cost_breakdown = "\n".join(
-            [f"  - {op.capitalize()}: ${cost:.4f}" for op, cost in operation_costs.items()]
+            [
+                f"  - {op.capitalize()}: ${cost:.4f}"
+                for op, cost in operation_costs.items()
+            ]
         )
 
         cost_message = (
@@ -109,13 +120,15 @@ async def media_handler(message: Message, app: App, state: FSMContext):
 
 
 def create_notification_callback(notification_message: Message):
+    text = notification_message.text
+    assert text is not None
+
     async def callback(update_text: str):
-        old_text = notification_message.text
-        new_text = old_text + "\n" + update_text
-        return await notification_message.edit_text(new_text)
+        nonlocal text
+        text = text + "\n" + update_text
+        return await notification_message.edit_text(text)
+
     return callback
-
-
 
 
 @router.message()
@@ -180,4 +193,5 @@ async def _basic_chat_handler(message: Message, app: App):
         message,
         "This is a Whisper bot. "
         "\n\nSend an Audio, Video, Voice or Video Note message to transcribe and summarize it.",
+        "\n\nReply to a text message from bot to chat about its transcript or summary with LLM",
     )

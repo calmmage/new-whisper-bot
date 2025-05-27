@@ -3,8 +3,17 @@ import datetime
 import time
 from io import BytesIO
 from pathlib import Path
-from typing import BinaryIO, Dict, List, Optional, Union, Sequence, Any
-
+from typing import (
+    BinaryIO,
+    Dict,
+    List,
+    Optional,
+    Union,
+    Sequence,
+    Any,
+    Callable,
+    Awaitable,
+)
 import openai
 from aiogram.types import Message as AiogramMessage
 from loguru import logger
@@ -190,6 +199,9 @@ class App:
 
         # Estimate cost
         if operation == "transcription":
+            assert (
+                audio_duration_seconds is not None
+            ), "audio_duration_seconds is required for transcription cost estimation"
             estimated_cost = estimate_whisper_cost(
                 file_size_mb or (input_length / (1024 * 1024)),
                 model,
@@ -239,7 +251,9 @@ class App:
                 message_id=message_id,
             )
 
-    async def write_accumulated_costs(self, username: str, operation_type: Optional[str] = None) -> None:
+    async def write_accumulated_costs(
+        self, username: str, operation_type: Optional[str] = None
+    ) -> None:
         """
         Write accumulated costs to the database and clear the accumulator.
 
@@ -247,14 +261,19 @@ class App:
             username: Username for cost tracking
             operation_type: Optional operation type to filter costs (e.g., 'transcription', 'formatting')
         """
-        if username not in self._accumulated_costs or not self._accumulated_costs[username]:
+        if (
+            username not in self._accumulated_costs
+            or not self._accumulated_costs[username]
+        ):
             return
 
         costs_to_write = self._accumulated_costs[username]
 
         # Filter by operation type if specified
         if operation_type:
-            costs_to_write = [cost for cost in costs_to_write if cost["operation"] == operation_type]
+            costs_to_write = [
+                cost for cost in costs_to_write if cost["operation"] == operation_type
+            ]
 
         if not costs_to_write:
             return
@@ -275,9 +294,15 @@ class App:
                 }
 
             operation_totals[operation]["cost"] += cost_data["cost"]
-            operation_totals[operation]["input_length"] += cost_data["usage"].get("input_length", 0)
-            operation_totals[operation]["output_length"] += cost_data["usage"].get("output_length", 0)
-            operation_totals[operation]["processing_time"] += cost_data["usage"].get("processing_time", 0.0)
+            operation_totals[operation]["input_length"] += cost_data["usage"].get(
+                "input_length", 0
+            )
+            operation_totals[operation]["output_length"] += cost_data["usage"].get(
+                "output_length", 0
+            )
+            operation_totals[operation]["processing_time"] += cost_data["usage"].get(
+                "processing_time", 0.0
+            )
             operation_totals[operation]["count"] += 1
 
         # Write aggregated costs to database
@@ -301,7 +326,8 @@ class App:
         # Clear the accumulated costs for this user and operation
         if operation_type:
             self._accumulated_costs[username] = [
-                cost for cost in self._accumulated_costs[username] 
+                cost
+                for cost in self._accumulated_costs[username]
                 if cost["operation"] != operation_type
             ]
         else:
@@ -427,7 +453,10 @@ class App:
 
     # Main method
     async def process_message(
-        self, message: AiogramMessage, whisper_model: Optional[str] = None
+        self,
+        message: AiogramMessage,
+        whisper_model: Optional[str] = None,
+        status_callback: Optional[Callable[[str], Awaitable[None]]] = None,
     ) -> str:
         """
         [x] process_message
@@ -465,18 +494,25 @@ class App:
         logger.info(f"User {username} submitted a file for processing: {file_info}")
         await self.log_event("file_submission", username, file_info)
 
-        media_file = await self.download_attachment(message)
+        media_file = await self.download_attachment(
+            message, status_callback=status_callback
+        )
 
-        parts = await self.prepare_parts(media_file)
+        parts = await self.prepare_parts(media_file, status_callback=status_callback)
 
         # Store message_id per user for async safety
         self._user_message_ids[username] = message_id
 
         chunks = await self.process_parts(
-            parts, username=username, whisper_model=whisper_model
+            parts,
+            username=username,
+            whisper_model=whisper_model,
+            status_callback=status_callback,
         )
 
-        chunks = await self.format_chunks_with_llm(chunks, username=username)
+        chunks = await self.format_chunks_with_llm(
+            chunks, username=username, status_callback=status_callback
+        )
 
         result = merge_all_chunks(chunks)
 
@@ -514,8 +550,12 @@ class App:
             return "unknown"
 
     async def download_attachment(
-        self, message: AiogramMessage
+        self,
+        message: AiogramMessage,
+        status_callback: Optional[Callable[[str], Awaitable[None]]] = None,
     ) -> Union[BinaryIO, Path]:
+        if status_callback is not None:
+            await status_callback("Downloading media file...")
         return await download_file(
             message=message,
             target_dir=self.config.downloads_dir,
@@ -528,8 +568,16 @@ class App:
         )
 
     # region prepare_parts
-    async def prepare_parts(self, media_file: Union[BinaryIO, Path]) -> Sequence[Audio]:
+    async def prepare_parts(
+        self,
+        media_file: Union[BinaryIO, Path],
+        status_callback: Optional[Callable[[str], Awaitable[None]]] = None,
+    ) -> Sequence[Audio]:
         if isinstance(media_file, Path):
+            if status_callback is not None:
+                await status_callback(
+                    "Preparing audio - converting to mp3 and cutting into manageable parts..."
+                )
             # process file on disk - with
             parts = await self.process_file_on_disk(media_file)
             if self.config.cleanup_downloads:
@@ -580,6 +628,7 @@ class App:
         parts: Sequence[Audio],
         username: Optional[str] = None,
         whisper_model: Optional[str] = None,
+        status_callback: Optional[Callable[[str], Awaitable[None]]] = None,
     ) -> List[str]:
         """
         Process multiple audio parts.
@@ -596,6 +645,9 @@ class App:
         logger.info(f"Processing {len(parts)} audio parts")
         start_time = time.time()
 
+        if status_callback is not None:
+            await status_callback(f"Parsing audio - {len(parts)} parts...")
+
         # this has to be done one by one, do NOT parallelize.
         for i, part in enumerate(parts):
             logger.info(f"Processing part {i + 1}/{len(parts)}")
@@ -603,6 +655,8 @@ class App:
             chunks += await self.process_part(
                 part, username=username, whisper_model=whisper_model
             )
+            if status_callback is not None:
+                await status_callback(f"Part {i + 1}/{len(parts)} done")
             if isinstance(part, Path):
                 if self.config.cleanup_downloads:
                     part.unlink(missing_ok=True)
@@ -666,9 +720,14 @@ class App:
         )
 
         audio_chunks = split_audio(
-            audio, period=period, buffer=self.config.overlap_duration, return_as_files=False
+            audio,
+            period=period,
+            buffer=self.config.overlap_duration,
+            return_as_files=False,
         )
-        assert all(isinstance(audio_chunk, AudioSegment) for audio_chunk in audio_chunks)
+        assert all(
+            isinstance(audio_chunk, AudioSegment) for audio_chunk in audio_chunks
+        )
 
         logger.info(
             f"Split audio into {len(audio_chunks)} chunks with period {period / 1000:.2f} seconds"
@@ -770,7 +829,7 @@ class App:
                 processing_time=processing_time,
                 file_name=audio_file.name,
                 audio_duration_seconds=audio_duration_sec,
-                write_to_db=False
+                write_to_db=False,
             )
 
             return transcription
@@ -802,11 +861,11 @@ class App:
         # Create tasks for all chunks
         tasks = [
             self.parse_audio_chunk(
-                chunk, 
-                model_name=model_name, 
-                language=language, 
+                chunk,
+                model_name=model_name,
+                language=language,
                 username=username,
-                chunk_index=i
+                chunk_index=i,
             )
             for i, chunk in enumerate(audio_chunks)
         ]
@@ -830,7 +889,10 @@ class App:
     # region format_chunks_with_llm
 
     async def format_chunks_with_llm(
-        self, chunks: List[str], username: str
+        self,
+        chunks: List[str],
+        username: str,
+        status_callback: Optional[Callable[[str], Awaitable[None]]] = None,
     ) -> List[str]:
         """
         Format multiple text chunks using LLM.
@@ -851,6 +913,9 @@ class App:
                 f"exceeds threshold ({self.config.formatting_disable_threshold} chars)"
             )
             return chunks
+
+        if status_callback is not None:
+            await status_callback("Formatting punctuation and capitalization...")
 
         logger.info(
             f"Formatting {len(chunks)} text chunks with LLM (total: {total_length} chars)"
@@ -914,14 +979,16 @@ class App:
                 input_data=chunk,
                 output_data=formatted_text,
                 processing_time=processing_time,
-                write_to_db=False
+                write_to_db=False,
             )
 
             return formatted_text
 
     # endregion format_chunks_with_llm
 
-    async def create_summary(self, transcript: str, username: str, message_id: Optional[int] = None) -> str:
+    async def create_summary(
+        self, transcript: str, username: str, message_id: Optional[int] = None
+    ) -> str:
         """
         Create a summary of the transcript using the configured model.
 
@@ -975,7 +1042,7 @@ class App:
                 input_data=transcript,
                 output_data=summary,
                 processing_time=processing_time,
-                write_to_db=True
+                write_to_db=True,
             )
 
             # Write accumulated summary costs to the database
@@ -984,7 +1051,9 @@ class App:
 
             return summary
 
-    async def chat_about_transcript(self, full_prompt: str, username: str, model: str=None) -> str:
+    async def chat_about_transcript(
+        self, full_prompt: str, username: str, model: str = None
+    ) -> str:
         """
         Chat about the transcript using the configured chat model.
 
@@ -1043,7 +1112,7 @@ class App:
                 input_data=full_prompt,
                 output_data=response,
                 processing_time=processing_time,
-                write_to_db=False
+                write_to_db=False,
             )
 
             # Write accumulated chat costs to the database
