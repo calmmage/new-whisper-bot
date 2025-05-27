@@ -42,7 +42,7 @@ async def start_handler(message: Message, app: App):
 
 
 @router.message(F.audio | F.voice | F.video | F.document | F.video_note)
-async def main_chat_handler(message: Message, app: App, state: FSMContext):
+async def media_handler(message: Message, app: App, state: FSMContext):
     assert message.from_user is not None
     assert message.from_user.username is not None
 
@@ -60,7 +60,7 @@ async def main_chat_handler(message: Message, app: App, state: FSMContext):
         state=state,
         timeout=10,  # 10 seconds to choose, then default to whisper-1
         cleanup=True,
-        default_choice="whisper-1",
+        default_choice=app.config.transcription_model,
     )
 
     # Send a processing message
@@ -72,39 +72,49 @@ async def main_chat_handler(message: Message, app: App, state: FSMContext):
     # Transcribe the audio
     # Note: process_message already sets and clears per-user message_id internally
     transcription = await app.process_message(message, whisper_model=model)
-    await reply_safe(message, transcription)
+    await reply_safe(message, transcription, caption="Reminder: you can reply to any message to chat about the transcript or summary with LLM.")
     await notif.delete()
 
-    # Create and send summary
-    notif = await reply_safe(message, "🔄 Creating summary...")
+    if len(transcription) > app.config.summary_generation_threshold:
+        # Create and send summary
+        notif = await reply_safe(message, "🔄 Large transcript detected, Creating summary...")
 
-    # Set message_id for this user
-    app._user_message_ids[username] = message.message_id
 
-    summary = await app.create_summary(transcription, username=username)
+        summary = await app.create_summary(transcription, username=username, message_id=message.message_id)
 
-    # Clear message_id for this user
-    app._user_message_ids.pop(username, None)
+        # Clear message_id for this user
+        app._user_message_ids.pop(username, None)
 
-    await reply_safe(message, f"📋 <b>Summary:</b>\n\n{summary}")
-    await notif.delete()
+        await reply_safe(message, f"📋 <b>Summary:</b>\n\n{summary}")
+        await notif.delete()
 
     # Get and display cost information
-    cost_info = await app.get_total_cost(username)
+    cost_info = await app.get_total_cost(username, message_id=message.message_id)
     total_cost = cost_info["total_cost"]
-    operation_costs = cost_info["operation_costs"]
+    if total_cost > 0.01:
+        operation_costs = float(cost_info["operation_costs"])
 
-    cost_breakdown = "\n".join(
-        [f"  - {op.capitalize()}: ${cost:.4f}" for op, cost in operation_costs.items()]
-    )
+        cost_breakdown = "\n".join(
+            [f"  - {op.capitalize()}: ${cost:.4f}" for op, cost in operation_costs.items()]
+        )
 
-    cost_message = (
-        f"💰 <b>Processing Cost:</b>\n"
-        f"Total: ${total_cost:.4f} USD\n"
-        f"Breakdown:\n{cost_breakdown}"
-    )
+        cost_message = (
+            f"💰 <b>Processing Cost:</b>\n"
+            f"Total: ${total_cost:.4f} USD\n"
+            f"Breakdown:\n{cost_breakdown}"
+        )
 
-    await reply_safe(message, cost_message)
+        await reply_safe(message, cost_message)
+
+
+def create_notification_callback(notification_message: Message):
+    async def callback(update_text: str):
+        old_text = notification_message.text
+        new_text = old_text + "\n" + update_text
+        return await notification_message.edit_text(new_text)
+    return callback
+
+
 
 
 @router.message()
@@ -154,7 +164,7 @@ async def _reply_chat_handler(message: Message, app: App):
     chat_cost = after_cost["total_cost"] - before_cost["total_cost"]
 
     # Only show cost if it's significant
-    if chat_cost > 0.0001:
+    if chat_cost > 0.01:
         cost_message = f"💬 <b>Chat Cost:</b> ${chat_cost:.4f} USD"
         await reply_safe(message, cost_message)
 

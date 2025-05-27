@@ -68,7 +68,7 @@ class AppConfig(BaseSettings):
     # todo: allow user to configure
     summary_model: str = "claude-4-sonnet"
     summary_max_tokens: int = 2048  # Default max tokens for summary
-    # todo: use
+    summary_generation_threshold: int = 4000
     # todo: allow user to configure
     chat_model: str = (
         "claude-4-sonnet"  # Default chat model for discussing transcripts and summaries
@@ -77,7 +77,7 @@ class AppConfig(BaseSettings):
     # todo: allow user to configure
     formatting_model: str = "gpt-4.1-nano"
     formatting_disable_threshold: int = (
-        4000  # Skip formatting if total chunks length exceeds this
+        10000  # Skip formatting if total chunks length exceeds this
     )
 
     class Config:
@@ -109,6 +109,9 @@ class App:
         # Per-user message tracking for async safety
         self._user_message_ids: Dict[str, Optional[int]] = {}
 
+        # Accumulated costs for batch processing
+        self._accumulated_costs: Dict[str, List[Dict[str, Any]]] = {}
+
     @property
     def db(self):
         if self._db is None:
@@ -119,6 +122,195 @@ class App:
         """Get the current message ID for a user."""
         return self._user_message_ids.get(username)
 
+    async def track_costs(
+        self,
+        operation: str,
+        username: Optional[str],
+        model: str,
+        input_data: Union[str, bytes, AudioSegment],
+        output_data: str,
+        processing_time: float,
+        message_id: Optional[int] = None,
+        file_name: Optional[str] = None,
+        audio_duration_seconds: Optional[float] = None,
+        write_to_db: bool = False,
+    ) -> None:
+        """
+        Track costs for an operation.
+
+        Args:
+            operation: Type of operation (transcription, formatting, summary, chat)
+            username: Username for cost tracking
+            model: Model used
+            input_data: Input data (text, audio bytes, or AudioSegment)
+            output_data: Output text
+            processing_time: Time taken to process
+            file_name: Optional file name
+            audio_duration_seconds: Optional audio duration in seconds
+            write_to_db: Whether to write to the database immediately (default: False)
+        """
+        if not username:
+            logger.warning("Username is None, skipping cost tracking.")
+            return
+
+        if message_id is None:
+            message_id = self._get_user_message_id(username)
+
+        # Calculate input and output lengths
+        if isinstance(input_data, AudioSegment):
+            input_length = len(input_data)  # Duration in ms
+            file_size_mb = None
+            # For Whisper, "tokens" = minutes
+            estimated_minutes = (
+                audio_duration_seconds / 60
+                if audio_duration_seconds is not None
+                else input_length / (60 * 1000)
+            )
+            estimated_input_tokens = estimated_minutes
+            estimated_output_tokens = 0
+        elif isinstance(input_data, bytes):
+            input_length = len(input_data)
+            file_size_mb = input_length / (1024 * 1024)
+            # For Whisper, "tokens" = minutes
+            estimated_minutes = (
+                audio_duration_seconds / 60
+                if audio_duration_seconds is not None
+                else file_size_mb
+            )
+            estimated_input_tokens = estimated_minutes
+            estimated_output_tokens = 0
+        else:
+            input_length = len(input_data)
+            file_size_mb = None
+            # Rough estimate: 1 token ≈ 4 characters
+            estimated_input_tokens = input_length / 4
+            estimated_output_tokens = len(output_data) / 4
+
+        output_length = len(output_data)
+
+        # Estimate cost
+        if operation == "transcription":
+            estimated_cost = estimate_whisper_cost(
+                file_size_mb or (input_length / (1024 * 1024)),
+                model,
+                duration_seconds=audio_duration_seconds,
+            )
+        else:
+            estimated_cost = estimate_cost_from_text(
+                input_data if isinstance(input_data, str) else "", output_data, model
+            )
+
+        # Create usage info
+        usage_info = create_usage_info(
+            input_length=input_length,
+            output_length=output_length,
+            processing_time=processing_time,
+            estimated_input_tokens=estimated_input_tokens,
+            estimated_output_tokens=estimated_output_tokens,
+            file_name=file_name,
+            file_size_mb=file_size_mb,
+            audio_duration_seconds=audio_duration_seconds,
+        )
+
+        # Create cost data
+        cost_data = {
+            "operation": operation,
+            "user_id": username,
+            "model": model,
+            "cost": estimated_cost,
+            "usage": usage_info,
+            "message_id": self._get_user_message_id(username),
+            "timestamp": datetime.datetime.now(),
+        }
+
+        # Add to accumulated costs
+        if username not in self._accumulated_costs:
+            self._accumulated_costs[username] = []
+        self._accumulated_costs[username].append(cost_data)
+
+        # Log cost to database if requested
+        if write_to_db:
+            await self.log_cost(
+                operation=operation,
+                user_id=username,
+                model=model,
+                cost=estimated_cost,
+                usage=usage_info,
+                message_id=message_id,
+            )
+
+    async def write_accumulated_costs(self, username: str, operation_type: Optional[str] = None) -> None:
+        """
+        Write accumulated costs to the database and clear the accumulator.
+
+        Args:
+            username: Username for cost tracking
+            operation_type: Optional operation type to filter costs (e.g., 'transcription', 'formatting')
+        """
+        if username not in self._accumulated_costs or not self._accumulated_costs[username]:
+            return
+
+        costs_to_write = self._accumulated_costs[username]
+
+        # Filter by operation type if specified
+        if operation_type:
+            costs_to_write = [cost for cost in costs_to_write if cost["operation"] == operation_type]
+
+        if not costs_to_write:
+            return
+
+        # Calculate total cost and usage for each operation type
+        operation_totals = {}
+        for cost_data in costs_to_write:
+            operation = cost_data["operation"]
+            if operation not in operation_totals:
+                operation_totals[operation] = {
+                    "cost": 0.0,
+                    "input_length": 0,
+                    "output_length": 0,
+                    "processing_time": 0.0,
+                    "count": 0,
+                    "model": cost_data["model"],
+                    "message_id": cost_data["message_id"],
+                }
+
+            operation_totals[operation]["cost"] += cost_data["cost"]
+            operation_totals[operation]["input_length"] += cost_data["usage"].get("input_length", 0)
+            operation_totals[operation]["output_length"] += cost_data["usage"].get("output_length", 0)
+            operation_totals[operation]["processing_time"] += cost_data["usage"].get("processing_time", 0.0)
+            operation_totals[operation]["count"] += 1
+
+        # Write aggregated costs to database
+        for operation, totals in operation_totals.items():
+            usage_info = {
+                "input_length": totals["input_length"],
+                "output_length": totals["output_length"],
+                "processing_time": totals["processing_time"],
+                "count": totals["count"],
+            }
+
+            await self.log_cost(
+                operation=operation,
+                user_id=username,
+                model=totals["model"],
+                cost=totals["cost"],
+                usage=usage_info,
+                message_id=totals["message_id"],
+            )
+
+        # Clear the accumulated costs for this user and operation
+        if operation_type:
+            self._accumulated_costs[username] = [
+                cost for cost in self._accumulated_costs[username] 
+                if cost["operation"] != operation_type
+            ]
+        else:
+            self._accumulated_costs[username] = []
+
+        logger.info(f"Wrote accumulated costs for user {username} to database")
+
+    # todo: rework all our tracking methods to capture full input and output of each operation
+    #  at the per-operation level, not per-chunk.
     async def log_event(
         self, event_type: str, user_id: str, data: Optional[Dict[str, Any]] = None
     ) -> None:
@@ -395,6 +587,7 @@ class App:
         Args:
             parts: Sequence of audio parts to process
             username: Username for cost tracking
+            whisper_model: Optional model to use for transcription
 
         Returns:
             List of transcription texts
@@ -418,6 +611,11 @@ class App:
         logger.info(
             f"Processed {len(parts)} parts in {processing_time:.2f}s, got {len(chunks)} chunks"
         )
+
+        # Write accumulated transcription costs to the database
+        if username:
+            await self.write_accumulated_costs(username, operation_type="transcription")
+
         return chunks
 
     @staticmethod
@@ -468,8 +666,9 @@ class App:
         )
 
         audio_chunks = split_audio(
-            audio, period=period, buffer=self.config.overlap_duration
+            audio, period=period, buffer=self.config.overlap_duration, return_as_files=False
         )
+        assert all(isinstance(audio_chunk, AudioSegment) for audio_chunk in audio_chunks)
 
         logger.info(
             f"Split audio into {len(audio_chunks)} chunks with period {period / 1000:.2f} seconds"
@@ -493,19 +692,21 @@ class App:
     )
     async def parse_audio_chunk(
         self,
-        audio_file: BytesIO,
+        audio_chunk: AudioSegment,
         model_name: Optional[str] = None,
         language: Optional[str] = None,
         username: Optional[str] = None,
+        chunk_index: int = 0,
     ) -> str:
         """
         Parse a single audio chunk using OpenAI Whisper API.
 
         Args:
-            audio_file: in-memory audio file
+            audio_chunk: Audio segment to transcribe
             model_name: Name of the Whisper model to use (whisper-1)
             language: Language code (optional, auto-detected if None)
             username: Username for cost tracking
+            chunk_index: Index of the chunk for naming
 
         Returns:
             Transcription text
@@ -513,13 +714,27 @@ class App:
         if model_name is None:
             model_name = self.config.transcription_model
 
+        chunk_name = f"chunk_{chunk_index}.mp3"
         logger.info(
-            f"Transcribing {audio_file.name} using OpenAI Whisper API model {model_name}"
+            f"Transcribing {chunk_name} using OpenAI Whisper API model {model_name}"
         )
         start_time = time.time()
 
         async with self.whisper_semaphore:
-            # Get audio duration for cost estimation
+            # Get audio duration directly from AudioSegment
+            # Duration in milliseconds
+            audio_duration_ms = len(audio_chunk)
+            # Convert to seconds
+            audio_duration_sec = audio_duration_ms / 1000
+            logger.info(f"Audio duration: {audio_duration_sec:.2f} seconds")
+
+            # Convert AudioSegment to BytesIO for API call
+            audio_file = BytesIO()
+            audio_chunk.export(audio_file, format="mp3")
+            audio_file.name = chunk_name
+            audio_file.seek(0)
+
+            # Get audio data for file size calculation
             audio_file.seek(0)
             audio_data = audio_file.read()
             audio_file.seek(0)
@@ -545,35 +760,24 @@ class App:
                 f"Transcription complete for {audio_file.name}: {len(transcription)} characters in {processing_time:.2f}s"
             )
 
-            # Estimate cost using utility
-            estimated_cost = estimate_whisper_cost(file_size_mb, model_name)
-
-            # Log cost information if username is provided
-            if username:
-                usage_info = create_usage_info(
-                    input_length=len(audio_data),
-                    output_length=len(transcription),
-                    processing_time=processing_time,
-                    estimated_input_tokens=file_size_mb,  # For Whisper, "tokens" = minutes
-                    estimated_output_tokens=0,
-                    file_name=audio_file.name,
-                    file_size_mb=file_size_mb,
-                )
-
-                await self.log_cost(
-                    operation="transcription",
-                    user_id=username,
-                    model=model_name,
-                    cost=estimated_cost,
-                    usage=usage_info,
-                    message_id=self._get_user_message_id(username),
-                )
+            # Track costs (accumulate without writing to DB)
+            await self.track_costs(
+                operation="transcription",
+                username=username,
+                model=model_name,
+                input_data=audio_data,
+                output_data=transcription,
+                processing_time=processing_time,
+                file_name=audio_file.name,
+                audio_duration_seconds=audio_duration_sec,
+                write_to_db=False
+            )
 
             return transcription
 
     async def parse_audio_chunks(
         self,
-        audio_chunks: List[BytesIO],
+        audio_chunks: List[AudioSegment],
         model_name: Optional[str] = None,
         language: Optional[str] = None,
         username: Optional[str] = None,
@@ -582,7 +786,7 @@ class App:
         Parse multiple audio chunks using OpenAI Whisper API.
 
         Args:
-            audio_chunks: List of paths to audio files
+            audio_chunks: List of audio segments
             model_name: Name of the Whisper model to use (whisper-1)
             language: Language code (optional, auto-detected if None)
             username: Username for cost tracking
@@ -598,9 +802,13 @@ class App:
         # Create tasks for all chunks
         tasks = [
             self.parse_audio_chunk(
-                chunk, model_name=model_name, language=language, username=username
+                chunk, 
+                model_name=model_name, 
+                language=language, 
+                username=username,
+                chunk_index=i
             )
-            for chunk in audio_chunks
+            for i, chunk in enumerate(audio_chunks)
         ]
 
         # Wait for all tasks to complete
@@ -664,6 +872,9 @@ class App:
             f"(avg: {avg_time_per_chunk:.2f}s per chunk)"
         )
 
+        # Write accumulated formatting costs to the database
+        await self.write_accumulated_costs(username, operation_type="formatting")
+
         return formatted_chunks
 
     async def format_chunk(self, chunk: str, username: str) -> str:
@@ -695,38 +906,22 @@ class App:
                 f"Formatting complete: {len(chunk)} → {len(formatted_text)} characters in {processing_time:.2f}s"
             )
 
-            # Estimate cost using utility
-            estimated_cost = estimate_cost_from_text(
-                input_text=chunk,
-                output_text=formatted_text,
-                model=self.config.formatting_model,
-            )
-
-            # Create usage info
-            input_tokens = len(chunk) / 4
-            output_tokens = len(formatted_text) / 4
-            usage_info = create_usage_info(
-                input_length=len(chunk),
-                output_length=len(formatted_text),
-                processing_time=processing_time,
-                estimated_input_tokens=input_tokens,
-                estimated_output_tokens=output_tokens,
-            )
-
-            await self.log_cost(
+            # Track costs (accumulate without writing to DB)
+            await self.track_costs(
                 operation="formatting",
-                user_id=username,
+                username=username,
                 model=self.config.formatting_model,
-                cost=estimated_cost,
-                usage=usage_info,
-                message_id=self._get_user_message_id(username),
+                input_data=chunk,
+                output_data=formatted_text,
+                processing_time=processing_time,
+                write_to_db=False
             )
 
             return formatted_text
 
     # endregion format_chunks_with_llm
 
-    async def create_summary(self, transcript: str, username: str):
+    async def create_summary(self, transcript: str, username: str, message_id: Optional[int] = None) -> str:
         """
         Create a summary of the transcript using the configured model.
 
@@ -744,6 +939,9 @@ class App:
             # Small delay to be nice to the API
             await asyncio.sleep(0.1)
 
+            # Set message_id for this user
+            self._user_message_ids[username] = message_id
+
             summary = await create_summary(
                 transcription=transcript,
                 username=username,
@@ -758,24 +956,6 @@ class App:
                 f"Summary creation complete: {len(transcript)} → {len(summary)} characters in {processing_time:.2f}s"
             )
 
-            # Estimate cost using utility
-            estimated_cost = estimate_cost_from_text(
-                input_text=transcript,
-                output_text=summary,
-                model=self.config.summary_model,
-            )
-
-            # Create usage info
-            input_tokens = len(transcript) / 4
-            output_tokens = len(summary) / 4
-            usage_info = create_usage_info(
-                input_length=len(transcript),
-                output_length=len(summary),
-                processing_time=processing_time,
-                estimated_input_tokens=input_tokens,
-                estimated_output_tokens=output_tokens,
-            )
-
             # Log event for summary creation
             await self.log_event(
                 "summary_creation",
@@ -787,18 +967,24 @@ class App:
                 },
             )
 
-            await self.log_cost(
+            # Track costs (accumulate without writing to DB)
+            await self.track_costs(
                 operation="summary",
-                user_id=username,
+                username=username,
                 model=self.config.summary_model,
-                cost=estimated_cost,
-                usage=usage_info,
-                message_id=self._get_user_message_id(username),
+                input_data=transcript,
+                output_data=summary,
+                processing_time=processing_time,
+                write_to_db=True
             )
+
+            # Write accumulated summary costs to the database
+            # todo: check that the operation above with write_to_db=True is equivalent to this
+            # await self.write_accumulated_costs(username, operation_type="summary")
 
             return summary
 
-    async def chat_about_transcript(self, full_prompt: str, username: str) -> str:
+    async def chat_about_transcript(self, full_prompt: str, username: str, model: str=None) -> str:
         """
         Chat about the transcript using the configured chat model.
 
@@ -812,6 +998,9 @@ class App:
         logger.info(f"Processing chat request with {len(full_prompt)} characters")
         start_time = time.time()
 
+        if model is None:
+            model = self.config.chat_model
+
         # Log chat event
         await self.log_event(
             "chat_request", username, {"prompt_length": len(full_prompt)}
@@ -824,7 +1013,7 @@ class App:
             response = await aquery_llm_text(
                 prompt=full_prompt,
                 user=username,
-                model=self.config.chat_model,
+                model=model,
                 max_tokens=self.config.chat_max_tokens,
             )
 
@@ -833,24 +1022,6 @@ class App:
             # Log detailed information
             logger.info(
                 f"Chat response complete: {len(full_prompt)} → {len(response)} characters in {processing_time:.2f}s"
-            )
-
-            # Estimate cost using utility
-            estimated_cost = estimate_cost_from_text(
-                input_text=full_prompt,
-                output_text=response,
-                model=self.config.chat_model,
-            )
-
-            # Create usage info
-            input_tokens = len(full_prompt) / 4
-            output_tokens = len(response) / 4
-            usage_info = create_usage_info(
-                input_length=len(full_prompt),
-                output_length=len(response),
-                processing_time=processing_time,
-                estimated_input_tokens=input_tokens,
-                estimated_output_tokens=output_tokens,
             )
 
             # Log completion event
@@ -864,13 +1035,18 @@ class App:
                 },
             )
 
-            await self.log_cost(
+            # Track costs (accumulate without writing to DB)
+            await self.track_costs(
                 operation="chat",
-                user_id=username,
+                username=username,
                 model=self.config.chat_model,
-                cost=estimated_cost,
-                usage=usage_info,
-                message_id=self._get_user_message_id(username),
+                input_data=full_prompt,
+                output_data=response,
+                processing_time=processing_time,
+                write_to_db=False
             )
+
+            # Write accumulated chat costs to the database
+            await self.write_accumulated_costs(username, operation_type="chat")
 
             return response

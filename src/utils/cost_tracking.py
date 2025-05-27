@@ -77,7 +77,7 @@ def get_model_pricing_info(model: str) -> ModelPricing:
             return pricing
 
     # Default fallback to GPT-3.5 pricing
-    return MODEL_PRICING["gpt-3.5-turbo"]
+    return MODEL_PRICING["gpt-4o"]
 
 
 def estimate_cost(
