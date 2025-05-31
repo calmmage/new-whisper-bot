@@ -26,10 +26,7 @@ async def start_handler(message: Message, app: App):
         You can also <b>reply</b> to any text message from me to chat about its transcript or summary with LLM.
         """
     )
-    await send_safe(
-        message.chat.id,
-        welcome_message
-    )
+    await send_safe(message.chat.id, welcome_message)
 
 
 @commands_menu.botspot_command("help", "Show this help message")
@@ -63,13 +60,12 @@ async def help_handler(message: Message, app: App):
         So you might need to explore that as well to understand it. Basic template is available <a href="https://github.com/calmmage/botspot-template">here</a>
         """
     )
-    await send_safe(
-        message.chat.id,
-        help_message
-    )
+    await send_safe(message.chat.id, help_message)
+
 
 class Language(BaseModel):
     language_code: str
+
 
 @router.message(F.audio | F.voice | F.video | F.document | F.video_note)
 async def media_handler(message: Message, app: App, state: FSMContext):
@@ -99,7 +95,7 @@ async def media_handler(message: Message, app: App, state: FSMContext):
     notif = await reply_safe(
         message, "Processing your media file. Estimating transcription time..."
     )
-    
+
     # Transcribe the audio
     transcription = await app.process_message(
         message,
@@ -128,9 +124,9 @@ async def media_handler(message: Message, app: App, state: FSMContext):
 
     # Get and display cost information
     cost_info = await app.get_total_cost(username, message_id=message.message_id)
-    total_cost = cost_info["total_cost"]
+    total_cost = float(cost_info["total_cost"])
     if total_cost > 0.01:
-        operation_costs = float(cost_info["operation_costs"])
+        operation_costs = cost_info["operation_costs"]
 
         cost_breakdown = "\n".join(
             [
@@ -150,7 +146,7 @@ async def media_handler(message: Message, app: App, state: FSMContext):
 
 def create_notification_callback(notification_message: Message):
     text = notification_message.text
-    
+
     async def callback(update_text: str):
         nonlocal text
         assert text is not None
@@ -158,6 +154,7 @@ def create_notification_callback(notification_message: Message):
         await notification_message.edit_text(text)
 
     return callback
+
 
 async def ask_user_language(message: Message, app: App, state: FSMContext):
     assert message.from_user is not None
@@ -190,17 +187,20 @@ async def ask_user_language(message: Message, app: App, state: FSMContext):
             await message.reply("No language provided, please retry.")
             return
         parsed_language: Language = await aquery_llm_structured(
-            prompt = language_str,
+            prompt=language_str,
             output_schema=Language,
             model="gpt-4.1-nano",
             system_message="You are a language detection assistant. Your goal is to return the language code in ISO 639-1 format (e.g., 'en' for English, 'ru' for Russian).",
             user=username,
         )
         language_code = parsed_language.language_code
-        logger.info(f"User input: {language_str}, detected language code: {language_code}")
+        logger.info(
+            f"User input: {language_str}, detected language code: {language_code}"
+        )
     else:
         language_code = language
     return language_code
+
 
 @router.message()
 async def chat_handler(message: Message, app: App):
@@ -224,7 +224,9 @@ async def _reply_chat_handler(message: Message, app: App):
     prompt = await get_message_text(message, include_reply=True)
 
     # Process chat request
-    response = await app.chat_about_transcript(full_prompt=prompt, username=username, message_id=message.message_id)
+    response = await app.chat_about_transcript(
+        full_prompt=prompt, username=username, message_id=message.message_id
+    )
     response = markdown_to_html(response)
 
     cost = await app.get_total_cost(username, message_id=message.message_id)
@@ -246,6 +248,6 @@ async def _basic_chat_handler(message: Message, app: App):
     await answer_safe(
         message,
         "This is a Whisper bot. "
-        "\n\nSend an Audio, Video, Voice or Video Note message to transcribe and summarize it.",
+        "\n\nSend an Audio, Video, Voice or Video Note message to transcribe and summarize it."
         "\n\n<b>Reply</b> to a text message from bot to chat about its transcript or summary with LLM",
     )

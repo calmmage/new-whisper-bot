@@ -204,7 +204,7 @@ async def download_file_with_pyrogram(
     assert not isinstance(pyrogram_message, list)
 
     if target_dir is None:
-        target_dir = Path("../../utils")
+        target_dir = Path("./downloads/")
 
     if file_name is None:
         file_name = extract_file_name_from_pyrogram_message(

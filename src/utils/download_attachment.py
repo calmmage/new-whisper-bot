@@ -1,3 +1,4 @@
+from aiogram.exceptions import TelegramBadRequest
 from typing import BinaryIO, Optional, Union
 from pathlib import Path
 from loguru import logger
@@ -26,15 +27,11 @@ async def download_file(
             in_memory=True if in_memory is None else in_memory,
         )
 
-    except Exception as e:  # todo: specify api error
-        # use pyrogram downloader
-        logger.warning(
-            f"Generic error captured, update code to handle specific error, Type: {type(e)}, Error: {e}"
-        )
-        import traceback
-
-        traceback.print_exc()
-
+    except TelegramBadRequest as e:
+        if "file is too big" in str(e):
+            logger.info("File is too big, using pyrogram downloader")
+        else:
+            raise e
         from src.utils.download_attachment_pyrogram import (
             download_file_from_aiogram_message,
         )
