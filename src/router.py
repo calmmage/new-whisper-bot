@@ -7,6 +7,8 @@ from botspot import answer_safe, commands_menu, get_message_text, reply_safe
 from botspot.components.new.llm_provider import aquery_llm_structured
 from botspot.user_interactions import ask_user_choice, ask_user
 from botspot.utils import send_safe, markdown_to_html
+from botspot.utils.admin_filter import AdminFilter
+from botspot.types import Visibility
 from loguru import logger
 from textwrap import dedent
 
@@ -63,18 +65,12 @@ async def help_handler(message: Message, app: App):
     await send_safe(message.chat.id, help_message)
 
 
-@commands_menu.botspot_command("stats", "Show usage statistics (admin only)")
+@commands_menu.botspot_command("stats", "Show usage statistics (admin only)", visibility=Visibility.ADMIN_ONLY)
+@router.message(AdminFilter())
 @router.message(Command("stats"))
 async def stats_handler(message: Message, app: App):
     """Stats command handler - shows usage statistics for all users"""
     assert message.from_user is not None
-    
-    # TODO: Implement proper admin checking
-    # For now, you can add admin user IDs to check against
-    # admin_user_ids = [123456789, 987654321]  # Replace with actual admin user IDs
-    # if message.from_user.id not in admin_user_ids:
-    #     await send_safe(message.chat.id, "❌ This command is only available to administrators.")
-    #     return
     
     # Get user statistics
     try:
