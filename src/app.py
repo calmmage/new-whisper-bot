@@ -1135,3 +1135,94 @@ class App:
             )
 
             return response
+
+    async def get_user_statistics(self) -> Dict[str, Any]:
+        """
+        Get comprehensive usage statistics for all users.
+
+        Returns:
+            Dictionary with user statistics including request counts, total minutes, and costs
+        """
+        # Get all cost entries from the database
+        costs = await self.db.costs.find({}).to_list(length=10000)
+        events = await self.db.events.find({"event_type": "file_submission"}).to_list(length=10000)
+        
+        # Initialize user stats dictionary
+        user_stats = {}
+        
+        # Process cost data
+        for cost_entry in costs:
+            user_id = cost_entry.get("user_id")
+            if not user_id:
+                continue
+                
+            if user_id not in user_stats:
+                user_stats[user_id] = {
+                    "total_cost": 0.0,
+                    "total_requests": 0,
+                    "total_minutes": 0.0,
+                    "operations": {},
+                    "models": {},
+                    "first_activity": None,
+                    "last_activity": None,
+                }
+            
+            # Add cost
+            cost = float(cost_entry.get("cost", 0.0)) if cost_entry.get("cost") is not None else 0.0
+            user_stats[user_id]["total_cost"] += cost
+            
+            # Track operation types
+            operation = cost_entry.get("operation", "unknown")
+            if operation not in user_stats[user_id]["operations"]:
+                user_stats[user_id]["operations"][operation] = {"cost": 0.0, "count": 0}
+            user_stats[user_id]["operations"][operation]["cost"] += cost
+            user_stats[user_id]["operations"][operation]["count"] += 1
+            
+            # Track models used
+            model = cost_entry.get("model", "unknown")
+            if model not in user_stats[user_id]["models"]:
+                user_stats[user_id]["models"][model] = {"cost": 0.0, "count": 0}
+            user_stats[user_id]["models"][model]["cost"] += cost
+            user_stats[user_id]["models"][model]["count"] += 1
+            
+            # Track timestamps
+            timestamp = cost_entry.get("timestamp")
+            if timestamp:
+                if user_stats[user_id]["first_activity"] is None or timestamp < user_stats[user_id]["first_activity"]:
+                    user_stats[user_id]["first_activity"] = timestamp
+                if user_stats[user_id]["last_activity"] is None or timestamp > user_stats[user_id]["last_activity"]:
+                    user_stats[user_id]["last_activity"] = timestamp
+            
+            # Extract minutes from usage data
+            usage = cost_entry.get("usage", {})
+            if isinstance(usage, dict):
+                # For transcription operations, get minutes from estimated_minutes or audio_duration_seconds
+                if operation == "transcription":
+                    estimated_minutes = usage.get("estimated_minutes", 0)
+                    if estimated_minutes:
+                        user_stats[user_id]["total_minutes"] += float(estimated_minutes)
+                    elif usage.get("audio_duration_seconds"):
+                        minutes = float(usage.get("audio_duration_seconds", 0)) / 60
+                        user_stats[user_id]["total_minutes"] += minutes
+        
+        # Process event data to get request counts
+        for event in events:
+            user_id = event.get("user_id")
+            if user_id and user_id in user_stats:
+                user_stats[user_id]["total_requests"] += 1
+        
+        # Calculate summary statistics
+        total_users = len(user_stats)
+        total_cost_all_users = sum(stats["total_cost"] for stats in user_stats.values())
+        total_requests_all_users = sum(stats["total_requests"] for stats in user_stats.values())
+        total_minutes_all_users = sum(stats["total_minutes"] for stats in user_stats.values())
+        
+        return {
+            "user_stats": user_stats,
+            "summary": {
+                "total_users": total_users,
+                "total_cost": total_cost_all_users,
+                "total_requests": total_requests_all_users,
+                "total_minutes": total_minutes_all_users,
+            }
+        }

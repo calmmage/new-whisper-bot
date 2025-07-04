@@ -63,6 +63,71 @@ async def help_handler(message: Message, app: App):
     await send_safe(message.chat.id, help_message)
 
 
+@commands_menu.botspot_command("stats", "Show usage statistics (admin only)")
+@router.message(Command("stats"))
+async def stats_handler(message: Message, app: App):
+    """Stats command handler - shows usage statistics for all users"""
+    assert message.from_user is not None
+    
+    # TODO: Implement proper admin checking
+    # For now, you can add admin user IDs to check against
+    # admin_user_ids = [123456789, 987654321]  # Replace with actual admin user IDs
+    # if message.from_user.id not in admin_user_ids:
+    #     await send_safe(message.chat.id, "❌ This command is only available to administrators.")
+    #     return
+    
+    # Get user statistics
+    try:
+        stats = await app.get_user_statistics()
+        
+        # Format the statistics nicely
+        response = "<b>📊 Bot Usage Statistics</b>\n\n"
+        
+        # Summary section
+        summary = stats["summary"]
+        response += f"<b>📈 Summary:</b>\n"
+        response += f"• Total Users: {summary['total_users']}\n"
+        response += f"• Total Requests: {summary['total_requests']}\n"
+        response += f"• Total Audio Minutes: {summary['total_minutes']:.1f}\n"
+        response += f"• Total Cost: ${summary['total_cost']:.4f}\n\n"
+        
+        # Per-user statistics
+        response += "<b>👥 Per-User Statistics:</b>\n"
+        
+        user_stats = stats["user_stats"]
+        # Sort users by total cost (descending)
+        sorted_users = sorted(user_stats.items(), key=lambda x: x[1]["total_cost"], reverse=True)
+        
+        for username, user_data in sorted_users[:20]:  # Show top 20 users
+            response += f"\n<b>@{username}</b>\n"
+            response += f"  • Requests: {user_data['total_requests']}\n"
+            response += f"  • Audio Minutes: {user_data['total_minutes']:.1f}\n"
+            response += f"  • Total Cost: ${user_data['total_cost']:.4f}\n"
+            
+            # Show breakdown of operations if available
+            if user_data["operations"]:
+                response += f"  • Operations: "
+                op_details = []
+                for op, op_data in user_data["operations"].items():
+                    op_details.append(f"{op}({op_data['count']})")
+                response += ", ".join(op_details) + "\n"
+            
+            # Show activity timeframe
+            if user_data["first_activity"] and user_data["last_activity"]:
+                first = user_data["first_activity"]
+                last = user_data["last_activity"]
+                response += f"  • Active: {first.strftime('%Y-%m-%d')} to {last.strftime('%Y-%m-%d')}\n"
+        
+        if len(user_stats) > 20:
+            response += f"\n<i>... and {len(user_stats) - 20} more users</i>"
+            
+    except Exception as e:
+        logger.error(f"Error getting statistics: {e}")
+        response = f"❌ Error retrieving statistics: {str(e)}"
+    
+    await send_safe(message.chat.id, response)
+
+
 class Language(BaseModel):
     language_code: str
 
