@@ -152,6 +152,8 @@ async def media_handler(message: Message, app: App, state: FSMContext):
 
     language_code = await ask_user_language(message, app, state)
 
+    speedup = await ask_user_speedup(message, app, state)
+
     # Send a processing message
     notif = await reply_safe(
         message, "Processing your media file. Estimating transcription time..."
@@ -162,6 +164,7 @@ async def media_handler(message: Message, app: App, state: FSMContext):
         message,
         whisper_model=model,
         language=language_code,
+        speedup=speedup,
         status_callback=create_notification_callback(notif),
     )
     await reply_safe(message, transcription)
@@ -261,6 +264,29 @@ async def ask_user_language(message: Message, app: App, state: FSMContext):
     else:
         language_code = language
     return language_code
+
+
+async def ask_user_speedup(message: Message, app: App, state: FSMContext):
+    speedup = await ask_user_choice(
+        message.chat.id,
+        "Please choose audio speedup:",
+        {
+            "none": "No speedup (original speed)",
+            "2": "2x speed (default)",
+            "3": "3x speed",
+            "4": "4x speed", 
+            "5": "5x speed",
+        },
+        state=state,
+        default_choice="2",
+        timeout=10,
+        cleanup=app.config.cleanup_messages,
+    )
+    
+    if speedup == "none":
+        return None
+    else:
+        return float(speedup)
 
 
 @router.message()
