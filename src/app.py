@@ -1,6 +1,7 @@
 import asyncio
 import datetime
 import time
+from enum import Enum
 from io import BytesIO
 from pathlib import Path
 from typing import (
@@ -42,6 +43,11 @@ from src.utils.cost_tracking import (
     estimate_whisper_cost,
     create_usage_info,
 )
+
+
+class SpeedupMode(Enum):
+    FFMPEG = "ffmpeg"
+    PYDUB = "pydub"
 
 
 class AppConfig(BaseSettings):
@@ -91,6 +97,9 @@ class AppConfig(BaseSettings):
     formatting_disable_threshold: int = (
         10000  # Skip formatting if total chunks length exceeds this
     )
+
+    # Audio speedup configuration
+    speedup_mode: SpeedupMode = SpeedupMode.FFMPEG  # Default speedup implementation
 
     class Config:
         env_file = ".env"
@@ -460,6 +469,7 @@ class App:
         message: AiogramMessage,
         whisper_model: Optional[str] = None,
         language: Optional[str] = None,
+        speedup: Optional[float] = None,
         status_callback: Optional[Callable[[str], Awaitable[None]]] = None,
     ) -> str:
         """
@@ -502,7 +512,7 @@ class App:
             message, status_callback=status_callback
         )
 
-        parts = await self.prepare_parts(media_file, status_callback=status_callback)
+        parts = await self.prepare_parts(media_file, speedup=speedup, status_callback=status_callback)
 
         # Store message_id per user for async safety
         self._user_message_ids[username] = message_id
@@ -576,11 +586,12 @@ class App:
     async def prepare_parts(
         self,
         media_file: Union[BinaryIO, Path],
+        speedup: Optional[float] = None,
         status_callback: Optional[Callable[[str], Awaitable[None]]] = None,
     ) -> Sequence[Audio]:
         if isinstance(media_file, Path):
             # process file on disk - with
-            parts = await self.process_file_on_disk(media_file, status_callback=status_callback)
+            parts = await self.process_file_on_disk(media_file, speedup=speedup, status_callback=status_callback)
             if self.config.cleanup_downloads:
                 if media_file != parts[0]:
                     media_file.unlink(missing_ok=True)
@@ -588,19 +599,30 @@ class App:
         else:
             # process file in memory - with pydub
             assert isinstance(media_file, (BinaryIO, BytesIO))
+            if speedup is not None and self.config.speedup_mode == SpeedupMode.PYDUB:
+                if status_callback is not None:
+                    await status_callback(f"Applying {speedup}x speedup to audio...")
+                # Apply speedup using pydub
+                media_file = await self._apply_speedup_pydub(media_file, speedup)
             if status_callback is not None:
                 await status_callback(
                     "Just one part to process\n<b>Estimated processing time: Should be up to 1 minute</b>"
                 )
             return [media_file]
 
-    async def process_file_on_disk(self, media_file: Path, status_callback: Optional[Callable[[str], Awaitable[None]]] = None) -> Sequence[Audio]:
-        if media_file.suffix != ".mp3":
+    async def process_file_on_disk(self, media_file: Path, speedup: Optional[float] = None, status_callback: Optional[Callable[[str], Awaitable[None]]] = None) -> Sequence[Audio]:
+        # Skip conversion only if it's already MP3 AND there's no speedup
+        skip_conversion = media_file.suffix == ".mp3" and speedup is None
+        
+        if not skip_conversion:
             if status_callback is not None:
-                await status_callback(
-                    "Preparing audio - converting to mp3.."
-                )
-            mp3_file = await convert_to_mp3_ffmpeg(media_file)
+                status_msg = "Preparing audio - converting to mp3"
+                if speedup is not None:
+                    status_msg += f" with {speedup}x speedup"
+                status_msg += ".."
+                await status_callback(status_msg)
+            
+            mp3_file = await convert_to_mp3_ffmpeg(media_file, speedup=speedup)
             # delete original file
             if self.config.cleanup_downloads:
                 media_file.unlink(missing_ok=True)
@@ -634,6 +656,27 @@ class App:
     @staticmethod
     def _get_file_size(media_file):
         return media_file.stat().st_size
+
+    async def _apply_speedup_pydub(self, media_file: Union[BinaryIO, BytesIO], speedup: float) -> BytesIO:
+        """Apply speedup to audio using pydub."""
+        import asyncio
+        
+        def _speedup_audio():
+            # Load audio from binary data
+            audio = AudioSegment.from_file(media_file)
+            
+            # Apply speedup - this changes both tempo and pitch
+            # For tempo-only change, we would need a more complex approach
+            faster_audio = audio.speedup(playback_speed=speedup)
+            
+            # Convert back to BytesIO
+            output_buffer = BytesIO()
+            faster_audio.export(output_buffer, format="mp3")
+            output_buffer.seek(0)
+            return output_buffer
+        
+        # Run in thread to avoid blocking
+        return await asyncio.get_event_loop().run_in_executor(None, _speedup_audio)
 
     # endregion prepare_parts
 

@@ -12,6 +12,7 @@ async def convert_to_mp3_ffmpeg(
     output_path: Optional[Path] = None,
     format: str = "mp3",
     use_memory_profiler: bool = False,
+    speedup: Optional[float] = None,
 ) -> Path:
     """
     Convert video file to audio using ffmpeg.
@@ -21,15 +22,16 @@ async def convert_to_mp3_ffmpeg(
         output_path: Path to save the audio file (optional)
         format: Audio format (default: mp3)
         use_memory_profiler: Whether to use memory profiler implementation
+        speedup: Audio speedup factor (e.g., 2.0 for 2x speed)
 
     Returns:
         Path to the converted audio file
     """
-    # If the file is already an audio file, return it as is
+    # If the file is already an audio file and no speedup is requested, return it as is
     # if source_path.suffix.lower() in [".mp3", ".wav", ".ogg", ".m4a", ".flac"]:
     #     logger.info(f"File {source_path} is already an audio file, skipping conversion")
     #     return source_path
-    if source_path.suffix.lower() == ".mp3":
+    if source_path.suffix.lower() == ".mp3" and speedup is None:
         logger.info(f"File {source_path} is already an audio file, skipping conversion")
         return source_path
 
@@ -42,13 +44,13 @@ async def convert_to_mp3_ffmpeg(
 
     # Choose the appropriate implementation based on the flag
     if use_memory_profiler:
-        return await _convert_to_mp3_with_profiler(source_path, output_path, format)
+        return await _convert_to_mp3_with_profiler(source_path, output_path, format, speedup)
     else:
-        return await _convert_to_mp3_standard(source_path, output_path, format)
+        return await _convert_to_mp3_standard(source_path, output_path, format, speedup)
 
 
 async def _convert_to_mp3_standard(
-    source_path: Path, output_path: Path, format: str = "mp3"
+    source_path: Path, output_path: Path, format: str = "mp3", speedup: Optional[float] = None
 ) -> Path:
     """
     Standard implementation of video to audio conversion using ffmpeg.
@@ -57,6 +59,7 @@ async def _convert_to_mp3_standard(
         source_path: Path to the video file
         output_path: Path to save the audio file
         format: Audio format (default: mp3)
+        speedup: Audio speedup factor (e.g., 2.0 for 2x speed)
 
     Returns:
         Path to the converted audio file
@@ -72,13 +75,32 @@ async def _convert_to_mp3_standard(
             "-i",
             str(source_path),  # Input file
             "-vn",  # Disable video
+        ]
+        
+        # Add speedup filter if requested
+        if speedup is not None:
+            # For speedup > 2.0, chain multiple atempo filters for better quality
+            if speedup > 2.0:
+                # Calculate how many atempo filters we need
+                temp_speedup = speedup
+                filters = []
+                while temp_speedup > 2.0:
+                    filters.append("atempo=2.0")
+                    temp_speedup /= 2.0
+                if temp_speedup > 1.0:
+                    filters.append(f"atempo={temp_speedup}")
+                cmd.extend(["-filter:a", ",".join(filters)])
+            else:
+                cmd.extend(["-filter:a", f"atempo={speedup}"])
+        
+        cmd.extend([
             "-acodec",
             "libmp3lame" if format == "mp3" else format,  # Audio codec
             "-q:a",
             "2",  # Audio quality (0-9, 0=best)
             "-y",  # Overwrite output file if it exists
             str(output_path),  # Output file
-        ]
+        ])
 
         # Run the command
         process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -99,7 +121,7 @@ async def _convert_to_mp3_standard(
 
 
 async def _convert_to_mp3_with_profiler(
-    source_path: Path, output_path: Path, format: str = "mp3"
+    source_path: Path, output_path: Path, format: str = "mp3", speedup: Optional[float] = None
 ) -> Path:
     """
     Memory-profiled implementation of video to audio conversion using ffmpeg.
@@ -108,6 +130,7 @@ async def _convert_to_mp3_with_profiler(
         source_path: Path to the video file
         output_path: Path to save the audio file
         format: Audio format (default: mp3)
+        speedup: Audio speedup factor (e.g., 2.0 for 2x speed)
 
     Returns:
         Path to the converted audio file
@@ -121,13 +144,32 @@ async def _convert_to_mp3_with_profiler(
             "-i",
             str(source_path),  # Input file
             "-vn",  # Disable video
+        ]
+        
+        # Add speedup filter if requested
+        if speedup is not None:
+            # For speedup > 2.0, chain multiple atempo filters for better quality
+            if speedup > 2.0:
+                # Calculate how many atempo filters we need
+                temp_speedup = speedup
+                filters = []
+                while temp_speedup > 2.0:
+                    filters.append("atempo=2.0")
+                    temp_speedup /= 2.0
+                if temp_speedup > 1.0:
+                    filters.append(f"atempo={temp_speedup}")
+                cmd.extend(["-filter:a", ",".join(filters)])
+            else:
+                cmd.extend(["-filter:a", f"atempo={speedup}"])
+        
+        cmd.extend([
             "-acodec",
             "libmp3lame" if format == "mp3" else format,  # Audio codec
             "-q:a",
             "2",  # Audio quality (0-9, 0=best)
             "-y",  # Overwrite output file if it exists
             str(output_path),  # Output file
-        ]
+        ])
 
         # Start memory profiling
         memory_stats = []
