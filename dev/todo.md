@@ -1,18 +1,23 @@
 # Todos
 
+## 30 May 2025
+
+- [ ] add model picker for chat? permanent / per-message
+- [ ] bind and log all usage just for fun
+
 ## New architecture grok discussion
 https://grok.com/share/bGVnYWN5_832ecdcb-8083-4ef7-bfbf-9ab8411d8697
 
 ## Todos - 26 May
 
-- [ ] make sure the bot works for other users (and i have control over who) - try botspot friends
+- [x] make sure the bot works for other users (and i have control over who) - try botspot friends
 - [ ] make sure the bot works for anonymous users - and I have control over how much. Did I already implemnt this?
 
-- [ ] add explicitly models for transcript, chat, format and summary in app and User config
+- [x] add explicitly models for transcript, chat, format and summary in app and User config
   - [ ] implement better user settings component - handler etc.
 
-- [ ] report user on our progress - update status message along the way
-  - [ ] make a nice timing report in the end (total time to transcribe, details?)
+- [x] report user on our progress - update status message along the way
+  - [x] make a nice timing report in the end (total time to transcribe, details?)
   - Nah, need a way to view it but not in their face
 
 ## 25 May 2025
