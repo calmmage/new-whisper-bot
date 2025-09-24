@@ -602,7 +602,8 @@ class App:
                 if status_callback is not None:
                     await status_callback(f"Applying {speedup}x speedup to audio...")
                 # Apply speedup using pydub
-                media_file = await self._apply_speedup_pydub(media_file, speedup)
+                if speedup is not None:
+                    media_file = await self._apply_speedup_pydub(media_file, speedup)
             if status_callback is not None:
                 await status_callback(
                     "Just one part to process\n<b>Estimated processing time: Should be up to 1 minute</b>"
