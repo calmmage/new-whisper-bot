@@ -69,8 +69,7 @@ async def help_handler(message: Message, app: App):
 @commands_menu.botspot_command(
     "stats", "Show usage statistics (admin only)", visibility=Visibility.ADMIN_ONLY
 )
-@router.message(AdminFilter())
-@router.message(Command("stats"))
+@router.message(Command("stats"), AdminFilter())
 async def stats_handler(message: Message, app: App):
     """Stats command handler - shows usage statistics for all users"""
     assert message.from_user is not None
@@ -157,7 +156,7 @@ async def media_handler(message: Message, app: App, state: FSMContext):
 
     language_code = await ask_user_language(message, app, state)
 
-    speedup = await ask_user_speedup(message, app, state)
+    # Note: speedup will be asked later if file is processed on disk
 
     # Send a processing message
     notif = await reply_safe(
@@ -167,9 +166,9 @@ async def media_handler(message: Message, app: App, state: FSMContext):
     # Transcribe the audio
     transcription = await app.process_message(
         message,
+        state,
         whisper_model=model,
         language=language_code,
-        speedup=speedup,
         status_callback=create_notification_callback(notif),
     )
     await reply_safe(message, transcription)
@@ -277,7 +276,7 @@ async def ask_user_speedup(message: Message, app: App, state: FSMContext):
         "Please choose audio speedup:",
         {
             "none": "No speedup (original speed)",
-            "2": "2x speed (default)",
+            "2": "2x speed",
             "3": "3x speed",
             "4": "4x speed",
             "5": "5x speed",
