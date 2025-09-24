@@ -864,7 +864,7 @@ class App:
             audio_file.seek(0)
 
             # Estimate file size in MB for cost tracking
-            file_size_mb = len(audio_data) / (1024 * 1024)
+            # file_size_mb = len(audio_data) / (1024 * 1024)
 
             # Call the OpenAI API
             options = {}
