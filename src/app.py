@@ -4,18 +4,22 @@ import time
 from io import BytesIO
 from pathlib import Path
 from typing import (
+    Any,
+    Awaitable,
     BinaryIO,
+    Callable,
     Dict,
     List,
     Optional,
-    Union,
     Sequence,
-    Any,
-    Callable,
-    Awaitable,
+    Union,
 )
+
 import openai
 from aiogram.types import Message as AiogramMessage
+from botspot.components.data.mongo_database import get_database
+from botspot.components.new.llm_provider import aquery_llm_text
+from botspot.core.errors import BotspotError
 from loguru import logger
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings
@@ -27,21 +31,18 @@ from tenacity import (
     wait_exponential,
 )
 
-from botspot.components.new.llm_provider import aquery_llm_text
-from botspot.components.data.mongo_database import get_database
-from botspot.core.errors import BotspotError
-from src.utils.create_summary import create_summary
-from src.utils.audio_utils import split_audio, Audio
+from src.utils.audio_utils import Audio, split_audio
 from src.utils.convert_to_mp3_ffmpeg import convert_to_mp3_ffmpeg
+from src.utils.cost_tracking import (
+    create_usage_info,
+    estimate_cost_from_text,
+    estimate_whisper_cost,
+)
+from src.utils.create_summary import create_summary
 from src.utils.cut_audio_ffmpeg import cut_audio_ffmpeg
 from src.utils.download_attachment import download_file
 from src.utils.format_text_with_llm import format_text_with_llm
 from src.utils.text_utils import merge_all_chunks
-from src.utils.cost_tracking import (
-    estimate_cost_from_text,
-    estimate_whisper_cost,
-    create_usage_info,
-)
 
 
 class AppConfig(BaseSettings):
@@ -54,6 +55,9 @@ class AppConfig(BaseSettings):
     # todo: allow user to configure
     cleanup_messages: bool = False  # delete messages after processing
     use_original_file_name: bool = False
+
+    # Disable Pydub speedup due to poor quality (chipmunk effect)
+    disable_pydub_speedup: bool = True
 
     # cutting parameters
     target_part_size: int = (
@@ -458,6 +462,7 @@ class App:
     async def process_message(
         self,
         message: AiogramMessage,
+        state,  # FSMContext
         whisper_model: Optional[str] = None,
         language: Optional[str] = None,
         status_callback: Optional[Callable[[str], Awaitable[None]]] = None,
@@ -502,7 +507,7 @@ class App:
             message, status_callback=status_callback
         )
 
-        parts = await self.prepare_parts(media_file, status_callback=status_callback)
+        parts = await self.prepare_parts(media_file, message, state, status_callback=status_callback)
 
         # Store message_id per user for async safety
         self._user_message_ids[username] = message_id
@@ -576,31 +581,48 @@ class App:
     async def prepare_parts(
         self,
         media_file: Union[BinaryIO, Path],
+        message: AiogramMessage,
+        state,  # FSMContext
         status_callback: Optional[Callable[[str], Awaitable[None]]] = None,
     ) -> Sequence[Audio]:
         if isinstance(media_file, Path):
-            # process file on disk - with
-            parts = await self.process_file_on_disk(media_file, status_callback=status_callback)
+            # process file on disk - FFmpeg speedup available, ask user
+            from src.router import ask_user_speedup
+            speedup = await ask_user_speedup(message, self, state)
+            parts = await self.process_file_on_disk(media_file, speedup=speedup, status_callback=status_callback)
             if self.config.cleanup_downloads:
                 if media_file != parts[0]:
                     media_file.unlink(missing_ok=True)
             return parts
         else:
-            # process file in memory - with pydub
+            # process file in memory - no speedup available (voice notes)
             assert isinstance(media_file, (BinaryIO, BytesIO))
+            if not self.config.disable_pydub_speedup:
+                speedup = await ask_user_speedup(message, self, state)
+                if status_callback is not None:
+                    await status_callback(f"Applying {speedup}x speedup to audio...")
+                # Apply speedup using pydub
+                if speedup is not None:
+                    media_file = await self._apply_speedup_pydub(media_file, speedup)
             if status_callback is not None:
                 await status_callback(
                     "Just one part to process\n<b>Estimated processing time: Should be up to 1 minute</b>"
                 )
             return [media_file]
 
-    async def process_file_on_disk(self, media_file: Path, status_callback: Optional[Callable[[str], Awaitable[None]]] = None) -> Sequence[Audio]:
-        if media_file.suffix != ".mp3":
+    async def process_file_on_disk(self, media_file: Path, speedup: Optional[float] = None, status_callback: Optional[Callable[[str], Awaitable[None]]] = None) -> Sequence[Audio]:
+        # Skip conversion only if it's already MP3 AND there's no speedup
+        skip_conversion = media_file.suffix == ".mp3" and speedup is None
+        
+        if not skip_conversion:
             if status_callback is not None:
-                await status_callback(
-                    "Preparing audio - converting to mp3.."
-                )
-            mp3_file = await convert_to_mp3_ffmpeg(media_file)
+                status_msg = "Preparing audio - converting to mp3"
+                if speedup is not None:
+                    status_msg += f" with {speedup}x speedup"
+                status_msg += ".."
+                await status_callback(status_msg)
+            
+            mp3_file = await convert_to_mp3_ffmpeg(media_file, speedup=speedup)
             # delete original file
             if self.config.cleanup_downloads:
                 media_file.unlink(missing_ok=True)
@@ -634,6 +656,32 @@ class App:
     @staticmethod
     def _get_file_size(media_file):
         return media_file.stat().st_size
+
+    async def _apply_speedup_pydub(self, media_file: Union[BinaryIO, BytesIO], speedup: float) -> BytesIO:
+        """Apply speedup to audio using pydub."""
+        import asyncio
+        
+        def _speedup_audio():
+            # Load audio from binary data
+            audio = AudioSegment.from_file(media_file)
+            
+            # Apply speedup using frame rate manipulation to preserve pitch quality
+            # This avoids the chipmunk effect by manipulating frame rate then normalizing
+            sound_with_altered_frame_rate = audio._spawn(
+                audio.raw_data,
+                overrides={"frame_rate": int(audio.frame_rate * speedup)}
+            )
+            # Convert back to original frame rate to avoid pitch shift
+            faster_audio = sound_with_altered_frame_rate.set_frame_rate(audio.frame_rate)
+            
+            # Convert back to BytesIO
+            output_buffer = BytesIO()
+            faster_audio.export(output_buffer, format="mp3")
+            output_buffer.seek(0)
+            return output_buffer
+        
+        # Run in thread to avoid blocking
+        return await asyncio.get_event_loop().run_in_executor(None, _speedup_audio)
 
     # endregion prepare_parts
 
@@ -817,7 +865,7 @@ class App:
             audio_file.seek(0)
 
             # Estimate file size in MB for cost tracking
-            file_size_mb = len(audio_data) / (1024 * 1024)
+            # file_size_mb = len(audio_data) / (1024 * 1024)
 
             # Call the OpenAI API
             options = {}
@@ -1135,3 +1183,94 @@ class App:
             )
 
             return response
+
+    async def get_user_statistics(self) -> Dict[str, Any]:
+        """
+        Get comprehensive usage statistics for all users.
+
+        Returns:
+            Dictionary with user statistics including request counts, total minutes, and costs
+        """
+        # Get all cost entries from the database
+        costs = await self.db.costs.find({}).to_list(length=10000)
+        events = await self.db.events.find({"event_type": "file_submission"}).to_list(length=10000)
+        
+        # Initialize user stats dictionary
+        user_stats = {}
+        
+        # Process cost data
+        for cost_entry in costs:
+            user_id = cost_entry.get("user_id")
+            if not user_id:
+                continue
+                
+            if user_id not in user_stats:
+                user_stats[user_id] = {
+                    "total_cost": 0.0,
+                    "total_requests": 0,
+                    "total_minutes": 0.0,
+                    "operations": {},
+                    "models": {},
+                    "first_activity": None,
+                    "last_activity": None,
+                }
+            
+            # Add cost
+            cost = float(cost_entry.get("cost", 0.0)) if cost_entry.get("cost") is not None else 0.0
+            user_stats[user_id]["total_cost"] += cost
+            
+            # Track operation types
+            operation = cost_entry.get("operation", "unknown")
+            if operation not in user_stats[user_id]["operations"]:
+                user_stats[user_id]["operations"][operation] = {"cost": 0.0, "count": 0}
+            user_stats[user_id]["operations"][operation]["cost"] += cost
+            user_stats[user_id]["operations"][operation]["count"] += 1
+            
+            # Track models used
+            model = cost_entry.get("model", "unknown")
+            if model not in user_stats[user_id]["models"]:
+                user_stats[user_id]["models"][model] = {"cost": 0.0, "count": 0}
+            user_stats[user_id]["models"][model]["cost"] += cost
+            user_stats[user_id]["models"][model]["count"] += 1
+            
+            # Track timestamps
+            timestamp = cost_entry.get("timestamp")
+            if timestamp:
+                if user_stats[user_id]["first_activity"] is None or timestamp < user_stats[user_id]["first_activity"]:
+                    user_stats[user_id]["first_activity"] = timestamp
+                if user_stats[user_id]["last_activity"] is None or timestamp > user_stats[user_id]["last_activity"]:
+                    user_stats[user_id]["last_activity"] = timestamp
+            
+            # Extract minutes from usage data
+            usage = cost_entry.get("usage", {})
+            if isinstance(usage, dict):
+                # For transcription operations, get minutes from estimated_minutes or audio_duration_seconds
+                if operation == "transcription":
+                    estimated_minutes = usage.get("estimated_minutes", 0)
+                    if estimated_minutes:
+                        user_stats[user_id]["total_minutes"] += float(estimated_minutes)
+                    elif usage.get("audio_duration_seconds"):
+                        minutes = float(usage.get("audio_duration_seconds", 0)) / 60
+                        user_stats[user_id]["total_minutes"] += minutes
+        
+        # Process event data to get request counts
+        for event in events:
+            user_id = event.get("user_id")
+            if user_id and user_id in user_stats:
+                user_stats[user_id]["total_requests"] += 1
+        
+        # Calculate summary statistics
+        total_users = len(user_stats)
+        total_cost_all_users = sum(stats["total_cost"] for stats in user_stats.values())
+        total_requests_all_users = sum(stats["total_requests"] for stats in user_stats.values())
+        total_minutes_all_users = sum(stats["total_minutes"] for stats in user_stats.values())
+        
+        return {
+            "user_stats": user_stats,
+            "summary": {
+                "total_users": total_users,
+                "total_cost": total_cost_all_users,
+                "total_requests": total_requests_all_users,
+                "total_minutes": total_minutes_all_users,
+            }
+        }

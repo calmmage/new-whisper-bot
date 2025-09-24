@@ -222,6 +222,6 @@ next-env.d.ts
 CLAUDE.md
 GEMINI.md
 .cursorrules
-
-# AI instruction files (generated)
 .claude
+AGENTS.md
+WARP.md
