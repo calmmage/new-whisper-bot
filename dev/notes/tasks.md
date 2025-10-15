@@ -1,0 +1,16 @@
+- a
+    - `key: 0ed6dc32`
+    - Add support for adding botspot 'friends' on the fly
+        - update botspot functionality, not whisper-bot
+            - main intended usage right now is whisper-bot, so it should work here
+        - this should be admin-only feature
+            - use botspot command filters
+        - this should be persistent over restart
+            - use mongo botspot component (util get_database)
+            - if there's already 'friends' values in mongo - just ignore the env and load from there
+                - print warning about itnnnnnnnmb
+            - If not - initialize the list from env
+            - Same for admins, i guess
+        - Make sure our whole app keeps working if mongo component is not enabled
+            - just bypass this logic part and read from env, don't crash
+## Done
