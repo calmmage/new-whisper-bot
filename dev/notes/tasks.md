@@ -1,4 +1,23 @@
 - a
+    - `key: 294866a8`
+    - Add support for chat history (threads) to include all in the context for the bot
+- b
+    - `key: 37f89973`
+    - Bugfix litellm response timeout - increase with retries?
+- c
+    - `key: 572b65f2`
+    - Add support for adding botspot 'friends' on the fly
+- d
+    - `key: 3f62b240`
+    - Simplify main flow choices
+    - add user settings
+    - settings menu
+    - disable by default
+- e
+    - `key: 0a292e05`
+    - Add a new stats module command (for admin) to view all users and their total usage
+    - Look at already existing PR done by cursor and check it out? Or not..
+- f
     - `key: 0ed6dc32`
     - Add support for adding botspot 'friends' on the fly
         - update botspot functionality, not whisper-bot
