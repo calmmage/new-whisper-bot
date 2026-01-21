@@ -4,7 +4,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from botspot.core.bot_manager import BotManager
-from calmlib.utils import setup_logger
+from calmlib.logging import setup_logger
 from dotenv import load_dotenv
 from loguru import logger
 

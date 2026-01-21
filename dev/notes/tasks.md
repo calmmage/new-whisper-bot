@@ -1,3 +1,6 @@
+---
+calmmage_id: LI6LOEfj
+---
 - a
     - `key: 294866a8`
     - Add support for chat history (threads) to include all in the context for the bot
@@ -32,4 +35,13 @@
             - Same for admins, i guess
         - Make sure our whole app keeps working if mongo component is not enabled
             - just bypass this logic part and read from env, don't crash
+- g
+    - `key: uv_migration`
+    - Migrate from poetry to uv
+        - check `fix_repo` command
+        - look at calmlib/botspot for reference formatting
+        - write `convert_poetry_to_uv.py` script
+        - create test folder with sample source/target files
+        - preserve proper formatting (not default pyproject.toml writer)
+
 ## Done
