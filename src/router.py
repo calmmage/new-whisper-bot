@@ -128,6 +128,10 @@ async def stats_handler(message: Message, app: App):
     await send_safe(message.chat.id, response)
 
 
+# Friend management commands are now handled by botspot's access_control component
+# Enable with: BOTSPOT_ACCESS_CONTROL_ENABLED=true
+
+
 class Language(BaseModel):
     language_code: str
 

@@ -1,0 +1,47 @@
+---
+calmmage_id: LI6LOEfj
+---
+- a
+    - `key: 294866a8`
+    - Add support for chat history (threads) to include all in the context for the bot
+- b
+    - `key: 37f89973`
+    - Bugfix litellm response timeout - increase with retries?
+- c
+    - `key: 572b65f2`
+    - Add support for adding botspot 'friends' on the fly
+- d
+    - `key: 3f62b240`
+    - Simplify main flow choices
+    - add user settings
+    - settings menu
+    - disable by default
+- e
+    - `key: 0a292e05`
+    - Add a new stats module command (for admin) to view all users and their total usage
+    - Look at already existing PR done by cursor and check it out? Or not..
+- f
+    - `key: 0ed6dc32`
+    - Add support for adding botspot 'friends' on the fly
+        - update botspot functionality, not whisper-bot
+            - main intended usage right now is whisper-bot, so it should work here
+        - this should be admin-only feature
+            - use botspot command filters
+        - this should be persistent over restart
+            - use mongo botspot component (util get_database)
+            - if there's already 'friends' values in mongo - just ignore the env and load from there
+                - print warning about itnnnnnnnmb
+            - If not - initialize the list from env
+            - Same for admins, i guess
+        - Make sure our whole app keeps working if mongo component is not enabled
+            - just bypass this logic part and read from env, don't crash
+- g
+    - `key: uv_migration`
+    - Migrate from poetry to uv
+        - check `fix_repo` command
+        - look at calmlib/botspot for reference formatting
+        - write `convert_poetry_to_uv.py` script
+        - create test folder with sample source/target files
+        - preserve proper formatting (not default pyproject.toml writer)
+
+## Done
