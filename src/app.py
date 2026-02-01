@@ -61,8 +61,8 @@ class AppConfig(BaseSettings):
 
     # cutting parameters
     target_part_size: int = (
-        50 * 1024 * 1024
-    )  # 25 * 1024 * 1024  # desired max size in bytes
+        25 * 1024 * 1024
+    )  # 25 MB - reduced from 50MB to prevent OOM on memory-limited containers
     target_chunk_count: int = 10  # 20
     minimum_chunk_duration: int = 2 * 60 * 1000  # 2 minutes
     maximum_chunk_duration: int = 20 * 60 * 1000  # 20 minutes
