@@ -35,9 +35,14 @@ async def convert_to_mp3_ffmpeg(
         logger.info(f"File {source_path} is already an audio file, skipping conversion")
         return source_path
 
-    # If output_path is not provided, use the same directory and name as the video file
+    # If output_path is not provided, generate one
     if output_path is None:
-        output_path = source_path.with_suffix(f".{format}")
+        # If source is already the target format and we're applying speedup,
+        # use a different filename to avoid in-place editing (FFmpeg doesn't support it)
+        if source_path.suffix.lower() == f".{format}" and speedup is not None:
+            output_path = source_path.with_stem(f"{source_path.stem}_fast")
+        else:
+            output_path = source_path.with_suffix(f".{format}")
 
     # Ensure the output directory exists
     output_path.parent.mkdir(parents=True, exist_ok=True)
