@@ -1,9 +1,11 @@
 from textwrap import dedent
 
+from io import BytesIO
+
 from aiogram import F, Router
 from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message
+from aiogram.types import BufferedInputFile, Message
 from botspot import answer_safe, commands_menu, get_message_text, reply_safe
 from botspot.components.new.llm_provider import aquery_llm_structured
 from botspot.components.qol.bot_commands_menu import Visibility
@@ -14,6 +16,7 @@ from loguru import logger
 from pydantic import BaseModel
 
 from src.app import App
+from src.utils.stats_html import generate_stats_html
 
 router = Router()
 
@@ -70,18 +73,38 @@ async def help_handler(message: Message, app: App):
     "stats", "Show usage statistics (admin only)", visibility=Visibility.ADMIN_ONLY
 )
 @router.message(Command("stats"), AdminFilter())
-async def stats_handler(message: Message, app: App):
-    """Stats command handler - shows usage statistics for all users"""
+async def stats_handler(message: Message, app: App, state: FSMContext):
+    """Stats command handler - shows usage statistics with menu options"""
     assert message.from_user is not None
 
-    # Get user statistics
+    choice = await ask_user_choice(
+        message.chat.id,
+        "What statistics would you like to see?",
+        {
+            "all": "All users summary",
+            "single": "Single user stats",
+            "export": "Export HTML table",
+        },
+        state=state,
+        timeout=30,
+        default_choice="all",
+    )
+
+    if choice == "single":
+        await _show_single_user_stats(message, app, state)
+    elif choice == "export":
+        await _export_stats_html(message, app)
+    else:
+        await _show_all_users_stats(message, app)
+
+
+async def _show_all_users_stats(message: Message, app: App):
+    """Show summary statistics for all users."""
     try:
         stats = await app.get_user_statistics()
 
-        # Format the statistics nicely
         response = "<b>📊 Bot Usage Statistics</b>\n\n"
 
-        # Summary section
         summary = stats["summary"]
         response += "<b>📈 Summary:</b>\n"
         response += f"• Total Users: {summary['total_users']}\n"
@@ -89,34 +112,33 @@ async def stats_handler(message: Message, app: App):
         response += f"• Total Audio Minutes: {summary['total_minutes']:.1f}\n"
         response += f"• Total Cost: ${summary['total_cost']:.4f}\n\n"
 
-        # Per-user statistics
         response += "<b>👥 Per-User Statistics:</b>\n"
 
         user_stats = stats["user_stats"]
-        # Sort users by total cost (descending)
         sorted_users = sorted(
             user_stats.items(), key=lambda x: x[1]["total_cost"], reverse=True
         )
 
-        for username, user_data in sorted_users[:20]:  # Show top 20 users
+        for username, user_data in sorted_users[:20]:
             response += f"\n<b>@{username}</b>\n"
             response += f"  • Requests: {user_data['total_requests']}\n"
             response += f"  • Audio Minutes: {user_data['total_minutes']:.1f}\n"
             response += f"  • Total Cost: ${user_data['total_cost']:.4f}\n"
 
-            # Show breakdown of operations if available
             if user_data["operations"]:
                 response += "  • Operations: "
-                op_details = []
-                for op, op_data in user_data["operations"].items():
-                    op_details.append(f"{op}({op_data['count']})")
+                op_details = [
+                    f"{op}({op_data['count']})"
+                    for op, op_data in user_data["operations"].items()
+                ]
                 response += ", ".join(op_details) + "\n"
 
-            # Show activity timeframe
             if user_data["first_activity"] and user_data["last_activity"]:
                 first = user_data["first_activity"]
                 last = user_data["last_activity"]
-                response += f"  • Active: {first.strftime('%Y-%m-%d')} to {last.strftime('%Y-%m-%d')}\n"
+                response += (
+                    f"  • Active: {first.strftime('%Y-%m-%d')} to {last.strftime('%Y-%m-%d')}\n"
+                )
 
         if len(user_stats) > 20:
             response += f"\n<i>... and {len(user_stats) - 20} more users</i>"
@@ -126,6 +148,80 @@ async def stats_handler(message: Message, app: App):
         response = f"❌ Error retrieving statistics: {str(e)}"
 
     await send_safe(message.chat.id, response)
+
+
+async def _show_single_user_stats(message: Message, app: App, state: FSMContext):
+    """Show statistics for a single user."""
+    username = await ask_user(
+        message.chat.id,
+        "Enter the username (with or without @):",
+        state=state,
+        timeout=60,
+    )
+
+    if not username:
+        await send_safe(message.chat.id, "❌ No username provided.")
+        return
+
+    username = username.strip().lstrip("@")
+
+    try:
+        stats = await app.get_user_statistics()
+        user_stats = stats["user_stats"]
+
+        if username not in user_stats:
+            await send_safe(message.chat.id, f"❌ No statistics found for @{username}")
+            return
+
+        user_data = user_stats[username]
+
+        response = f"<b>📊 Statistics for @{username}</b>\n\n"
+        response += f"• Total Requests: {user_data['total_requests']}\n"
+        response += f"• Total Audio Minutes: {user_data['total_minutes']:.1f}\n"
+        response += f"• Total Cost: ${user_data['total_cost']:.4f}\n\n"
+
+        if user_data["operations"]:
+            response += "<b>Operations breakdown:</b>\n"
+            for op, op_data in user_data["operations"].items():
+                response += f"  • {op}: {op_data['count']} times, ${op_data['cost']:.4f}\n"
+
+        if user_data["models"]:
+            response += "\n<b>Models used:</b>\n"
+            for model, model_data in user_data["models"].items():
+                response += f"  • {model}: {model_data['count']} times, ${model_data['cost']:.4f}\n"
+
+        if user_data["first_activity"] and user_data["last_activity"]:
+            first = user_data["first_activity"]
+            last = user_data["last_activity"]
+            response += f"\n<b>Activity period:</b>\n"
+            response += f"  • First: {first.strftime('%Y-%m-%d %H:%M')}\n"
+            response += f"  • Last: {last.strftime('%Y-%m-%d %H:%M')}\n"
+
+    except Exception as e:
+        logger.error(f"Error getting statistics for {username}: {e}")
+        response = f"❌ Error retrieving statistics: {str(e)}"
+
+    await send_safe(message.chat.id, response)
+
+
+async def _export_stats_html(message: Message, app: App):
+    """Export statistics as HTML table file."""
+    try:
+        stats = await app.get_user_statistics()
+        html_content = generate_stats_html(stats)
+
+        html_bytes = BytesIO(html_content.encode("utf-8"))
+        document = BufferedInputFile(
+            html_bytes.getvalue(), filename="bot_statistics.html"
+        )
+
+        await message.answer_document(
+            document, caption="📊 Bot usage statistics export"
+        )
+
+    except Exception as e:
+        logger.error(f"Error exporting statistics: {e}")
+        await send_safe(message.chat.id, f"❌ Error exporting statistics: {str(e)}")
 
 
 # Friend management commands are now handled by botspot's access_control component

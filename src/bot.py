@@ -35,6 +35,8 @@ def main(debug=False) -> None:
         error_handler={"enabled": True},
         ask_user={"enabled": True},
         bot_commands_menu={"enabled": True},
+        mongo_database={"enabled": True},
+        access_control={"enabled": True, "commands_visible": True},
     )
 
     # Setup dispatcher with our components
