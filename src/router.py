@@ -16,6 +16,7 @@ from loguru import logger
 from pydantic import BaseModel
 
 from src.app import App
+from src.bot_settings import get_bot_settings
 from src.utils.stats_html import generate_stats_html
 
 router = Router()
@@ -228,6 +229,34 @@ async def _export_stats_html(message: Message, app: App):
 # Enable with: BOTSPOT_ACCESS_CONTROL_ENABLED=true
 
 
+@commands_menu.botspot_command(
+    "settings", "Bot settings (admin only)", visibility=Visibility.ADMIN_ONLY
+)
+@router.message(Command("settings"), AdminFilter())
+async def settings_handler(message: Message, state: FSMContext):
+    """Admin settings menu."""
+    settings = get_bot_settings()
+
+    choice = await ask_user_choice(
+        message.chat.id,
+        "Select a setting to toggle:",
+        {
+            "show_cost": "Show cost info after processing",
+            "back": "Back (no changes)",
+        },
+        state=state,
+        timeout=30,
+        default_choice="back",
+    )
+
+    if choice == "show_cost":
+        new_value = await settings.toggle("show_cost_info")
+        status = "enabled" if new_value else "disabled"
+        await send_safe(message.chat.id, f"✅ Cost info display is now <b>{status}</b>")
+    else:
+        await send_safe(message.chat.id, "No changes made.")
+
+
 class Language(BaseModel):
     language_code: str
 
@@ -290,26 +319,29 @@ async def media_handler(message: Message, app: App, state: FSMContext):
         )
         await notif.delete()
 
-    # Get and display cost information
-    cost_info = await app.get_total_cost(username, message_id=message.message_id)
-    total_cost = float(cost_info["total_cost"])
-    if total_cost > 0.01:
-        operation_costs = cost_info["operation_costs"]
+    # Get and display cost information (if enabled in settings)
+    settings = get_bot_settings()
+    show_cost = await settings.get("show_cost_info")
+    if show_cost:
+        cost_info = await app.get_total_cost(username, message_id=message.message_id)
+        total_cost = float(cost_info["total_cost"])
+        if total_cost > 0.01:
+            operation_costs = cost_info["operation_costs"]
 
-        cost_breakdown = "\n".join(
-            [
-                f"  - {op.capitalize()}: ${cost:.4f}"
-                for op, cost in operation_costs.items()
-            ]
-        )
+            cost_breakdown = "\n".join(
+                [
+                    f"  - {op.capitalize()}: ${cost:.4f}"
+                    for op, cost in operation_costs.items()
+                ]
+            )
 
-        cost_message = (
-            f"💰 <b>Processing Cost:</b>\n"
-            f"Total: ${total_cost:.4f} USD\n"
-            f"Breakdown:\n{cost_breakdown}"
-        )
+            cost_message = (
+                f"💰 <b>Processing Cost:</b>\n"
+                f"Total: ${total_cost:.4f} USD\n"
+                f"Breakdown:\n{cost_breakdown}"
+            )
 
-        await reply_safe(message, cost_message)
+            await reply_safe(message, cost_message)
 
 
 def create_notification_callback(notification_message: Message):
